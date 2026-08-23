@@ -2,13 +2,16 @@ import "reflect-metadata";
 import { DataSource, type DataSourceOptions } from "typeorm";
 import { env } from "../config/env.js";
 import { User } from "./entities/user.entity.js";
+import { Otp } from "./entities/otp.entity.js";
+import { UserSession } from "./entities/session.entity.js";
+import { ActivityLog } from "./entities/activity-log.entity.js";
 
 const getDataSourceOptions = (): DataSourceOptions => {
   const baseOptions = {
     type: "postgres" as const,
     synchronize: env.DB_SYNC,
     logging: env.DB_LOG,
-    entities: [User],
+    entities: [User, Otp, UserSession, ActivityLog],
     extra: {
       max: env.DB_MAX_CONNECTIONS,
     },

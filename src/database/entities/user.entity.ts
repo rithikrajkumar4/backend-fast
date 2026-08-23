@@ -4,6 +4,7 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from "typeorm";
 
 @Entity("users")
@@ -11,11 +12,22 @@ export class User {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
+  @Index({ unique: true })
+  @Column({ type: "varchar", length: 30, unique: true })
+  phoneNumber!: string;
+
+  @Index({ unique: true })
+  @Column({ type: "varchar", length: 50, unique: true })
+  username!: string;
+
   @Column({ type: "varchar", length: 255 })
   name!: string;
 
-  @Column({ type: "varchar", length: 255, unique: true })
-  email!: string;
+  @Column({ type: "int" })
+  age!: number;
+
+  @Column({ type: "varchar", length: 255, unique: true, nullable: true })
+  email?: string | null;
 
   @Column({ type: "boolean", default: true })
   isActive!: boolean;
@@ -26,3 +38,4 @@ export class User {
   @UpdateDateColumn({ type: "timestamptz" })
   updatedAt!: Date;
 }
+

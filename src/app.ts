@@ -5,6 +5,9 @@ import { corsPlugin } from "./plugins/cors.js";
 import { morganPlugin } from "./plugins/morgan.js";
 import { typeormPlugin } from "./plugins/typeorm.js";
 import { sensiblePlugin } from "./plugins/sensible.js";
+import { jwtPlugin } from "./plugins/jwt.js";
+import { activityTrackerPlugin } from "./plugins/activity-tracker.js";
+import { errorHandlerPlugin } from "./plugins/error-handler.js";
 import { rootRoutes } from "./routes/root.js";
 
 export async function buildApp(opts: FastifyServerOptions = {}): Promise<FastifyInstance> {
@@ -29,6 +32,9 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
     ...opts,
   });
 
+  // Register Global Centralized Error Handler
+  await app.register(errorHandlerPlugin);
+
   // Register Security & Core Plugins
   await app.register(helmet, {
     contentSecurityPolicy: env.NODE_ENV === "production",
@@ -37,6 +43,8 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
   await app.register(morganPlugin);
   await app.register(typeormPlugin);
   await app.register(sensiblePlugin);
+  await app.register(jwtPlugin);
+  await app.register(activityTrackerPlugin);
 
   // Register Application Routes
   await app.register(rootRoutes);

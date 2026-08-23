@@ -1,7 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
 import { User } from "../../../database/entities/user.entity.js";
+import { authRoutes } from "./auth.js";
 
 export const v1Routes: FastifyPluginAsync = async (fastify) => {
+  // Register Auth Module
+  await fastify.register(authRoutes, { prefix: "/auth" });
+
   fastify.get("/hello", async (request, _reply) => {
     const { name = "World" } = (request.query as { name?: string }) || {};
     return {
@@ -53,14 +57,24 @@ export const v1Routes: FastifyPluginAsync = async (fastify) => {
 
   fastify.post("/users", async (request, reply) => {
     try {
-      const body = request.body as { name?: string; email?: string; isActive?: boolean };
-      if (!body || !body.name || !body.email) {
-        return reply.badRequest("Missing required fields: 'name' and 'email'");
+      const body = request.body as {
+        name?: string;
+        phoneNumber?: string;
+        username?: string;
+        age?: number;
+        email?: string;
+        isActive?: boolean;
+      };
+      if (!body || !body.name || !body.phoneNumber || !body.username || body.age === undefined) {
+        return reply.badRequest("Missing required fields: 'name', 'phoneNumber', 'username', and 'age'");
       }
 
       const userRepository = fastify.db.getRepository(User);
       const newUser = userRepository.create({
         name: body.name,
+        phoneNumber: body.phoneNumber,
+        username: body.username,
+        age: body.age,
         email: body.email,
         isActive: body.isActive ?? true,
       });

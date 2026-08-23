@@ -1,0 +1,37 @@
+# ==========================================
+# Dockerfile for Running Tests
+# ==========================================
+FROM node:20-alpine AS test-runner
+
+# Install curl and certificates for healthchecks / connectivity tests
+RUN apk add --no-cache curl
+
+WORKDIR /app
+
+# Set environment to test
+ENV NODE_ENV=test
+ENV DB_HOST=postgres-test
+ENV DB_PORT=5432
+ENV DB_USER=postgres
+ENV DB_PASSWORD=postgres
+ENV DB_NAME=fastify_db_test
+ENV DB_SYNC=true
+ENV DB_LOG=false
+ENV PORT=3000
+
+# Install dependencies
+COPY package*.json ./
+RUN npm ci
+
+# Copy source code and config files
+COPY tsconfig.json ./
+COPY nodemon.json ./
+COPY src/ ./src/
+COPY scripts/ ./scripts/
+
+# Validate TypeScript typechecking as part of test build
+RUN npm run typecheck
+
+# Command to execute test runner
+CMD ["npm", "test"]
+

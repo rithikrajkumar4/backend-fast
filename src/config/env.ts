@@ -36,6 +36,11 @@ const envSchema = z.object({
   DB_MAX_CONNECTIONS: z.coerce.number().default(20),
   DB_SYNC: z.preprocess((val) => val === "true" || val === "1" || val === true, z.boolean()).default(true),
   DB_LOG: z.preprocess((val) => val === "true" || val === "1" || val === true, z.boolean()).default(false),
+  JWT_SECRET: z.string().default("super-secret-jwt-key-change-in-production"),
+  JWT_ACCESS_EXPIRY: z.string().default("15m"),
+  REFRESH_TOKEN_WEB_EXPIRY_DAYS: z.coerce.number().default(7),
+  REFRESH_TOKEN_APP_EXPIRY_DAYS: z.coerce.number().default(90),
+  DEFAULT_OTP: z.string().default("123456"),
 });
 
 const parseEnv = () => {

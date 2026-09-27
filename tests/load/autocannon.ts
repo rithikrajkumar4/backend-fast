@@ -10,6 +10,7 @@
  */
 import autocannon, { type Result } from "autocannon";
 import { buildTestApp, registerUser, uniquePhone, bearer, OTP } from "../helpers.js";
+import { FakeStorage } from "../fake-storage.js";
 
 const DURATION = Number(process.env.DURATION ?? 10);
 const CONNECTIONS = Number(process.env.CONNECTIONS ?? 20);
@@ -34,7 +35,8 @@ function run(url: string, s: Scenario): Promise<Result> {
 }
 
 async function main() {
-  const app = await buildTestApp();
+  const storage = new FakeStorage();
+  const app = await buildTestApp({ storage });
   await app.listen({ port: 0, host: "127.0.0.1" });
   const addr = app.server.address();
   const url = `http://127.0.0.1:${typeof addr === "object" && addr ? addr.port : 0}`;
@@ -42,6 +44,29 @@ async function main() {
 
   const { tokens } = await registerUser(app);
   const json = { "content-type": "application/json" };
+
+  // An album with 30 uploaded images and a public share link.
+  const albumRes = await app.inject({
+    method: "POST",
+    url: "/api/v1/albums",
+    headers: bearer(tokens.accessToken),
+    payload: { title: "Load album" },
+  });
+  const albumId = albumRes.json().data.album.id as string;
+  const files = Array.from({ length: 30 }, (_, i) => ({ fileName: `${i}.jpg`, contentType: "image/jpeg", sizeBytes: 1024 }));
+  const uploads = (
+    await app.inject({ method: "POST", url: `/api/v1/albums/${albumId}/uploads`, headers: bearer(tokens.accessToken), payload: { files } })
+  ).json().data.uploads as { imageId: string; upload: { fields: { key: string } } }[];
+  for (const u of uploads) storage.put(u.upload.fields.key, 1024);
+  await app.inject({
+    method: "POST",
+    url: `/api/v1/albums/${albumId}/uploads/complete`,
+    headers: bearer(tokens.accessToken),
+    payload: { imageIds: uploads.map((u) => u.imageId) },
+  });
+  const shareToken = (
+    await app.inject({ method: "POST", url: `/api/v1/albums/${albumId}/share-links`, headers: bearer(tokens.accessToken) })
+  ).json().data.link.token as string;
 
   const scenarios: Scenario[] = [
     { name: "health", p99BudgetMs: 100, opts: { url: `${url}/health` } },
@@ -113,6 +138,31 @@ async function main() {
           },
         ],
       },
+    },
+    {
+      name: "album-list",
+      p99BudgetMs: 150,
+      opts: { url: `${url}/api/v1/albums`, headers: bearer(tokens.accessToken) },
+    },
+    {
+      name: "album-view (30 images)",
+      p99BudgetMs: 200,
+      opts: { url: `${url}/api/v1/albums/${albumId}`, headers: bearer(tokens.accessToken) },
+    },
+    {
+      name: "request-uploads (5 files)",
+      p99BudgetMs: 300,
+      opts: {
+        url: `${url}/api/v1/albums/${albumId}/uploads`,
+        method: "POST",
+        headers: { ...json, ...bearer(tokens.accessToken) },
+        body: JSON.stringify({ files: files.slice(0, 5) }),
+      },
+    },
+    {
+      name: "shared-view (public link)",
+      p99BudgetMs: 200,
+      opts: { url: `${url}/api/v1/shared/${shareToken}` },
     },
     {
       name: "invalid-otp (400 expected)",

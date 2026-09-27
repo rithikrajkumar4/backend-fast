@@ -172,17 +172,18 @@ describe("POST /api/v1/auth/complete-profile", () => {
   it("creates a user with a custom (lowercased) username", async () => {
     const { phoneNumber, tempToken } = await getTempToken(app);
     const handle = uniqueHandle("Mixed");
+    const email = `Jane.${uniqueHandle()}@Example.com`;
     const res = await app.inject({
       method: "POST",
       url: "/api/v1/auth/complete-profile",
-      payload: { tempToken, name: "  Jane  ", age: 30, username: handle, email: "Jane.Doe@Example.com" },
+      payload: { tempToken, name: "  Jane  ", age: 30, username: handle, email },
     });
     assert.equal(res.statusCode, 201);
     const { user, tokens } = res.json().data;
     assert.equal(user.username, handle.toLowerCase());
     assert.equal(user.phoneNumber, phoneNumber);
     assert.equal(user.name, "Jane");
-    assert.equal(user.email, "jane.doe@example.com");
+    assert.equal(user.email, email.toLowerCase());
     assert.ok(tokens.accessToken && tokens.refreshToken && tokens.sessionId);
   });
 

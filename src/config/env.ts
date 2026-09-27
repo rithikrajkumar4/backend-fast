@@ -41,6 +41,20 @@ const envSchema = z.object({
   REFRESH_TOKEN_WEB_EXPIRY_DAYS: z.coerce.number().default(7),
   REFRESH_TOKEN_APP_EXPIRY_DAYS: z.coerce.number().default(90),
   DEFAULT_OTP: z.string().default("123456"),
+
+  // Media storage (S3) & CDN (CloudFront)
+  AWS_REGION: z.string().default("us-east-1"),
+  S3_BUCKET: z.string().default("backend-fast-media"),
+  S3_ENDPOINT: z.string().optional(), // e.g. http://localhost:9000 for MinIO
+  S3_FORCE_PATH_STYLE: z.preprocess((val) => val === "true" || val === "1" || val === true, z.boolean()).default(false),
+  CDN_BASE_URL: z.string().optional(), // e.g. https://dxxxx.cloudfront.net (falls back to the S3 URL)
+  CLOUDFRONT_KEY_PAIR_ID: z.string().optional(), // set with CLOUDFRONT_PRIVATE_KEY to serve signed CDN URLs
+  CLOUDFRONT_PRIVATE_KEY: z.string().optional(),
+  CDN_URL_TTL_SECONDS: z.coerce.number().default(3600),
+  UPLOAD_URL_TTL_SECONDS: z.coerce.number().default(600),
+  UPLOAD_MAX_BYTES: z.coerce.number().default(20 * 1024 * 1024),
+  UPLOAD_MAX_FILES: z.coerce.number().default(50),
+  SHARE_BASE_URL: z.string().default("http://localhost:3000/api/v1/shared"),
 });
 
 const parseEnv = () => {

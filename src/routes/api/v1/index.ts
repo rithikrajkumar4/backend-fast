@@ -1,10 +1,15 @@
 import type { FastifyPluginAsync } from "fastify";
 import { User } from "../../../database/entities/user.entity.js";
 import { authRoutes } from "./auth.js";
+import { albumRoutes, sharedRoutes } from "./albums.js";
 
 export const v1Routes: FastifyPluginAsync = async (fastify) => {
   // Register Auth Module
   await fastify.register(authRoutes, { prefix: "/auth" });
+
+  // Register Albums (S3 image collections) & public share links
+  await fastify.register(albumRoutes, { prefix: "/albums" });
+  await fastify.register(sharedRoutes, { prefix: "/shared" });
 
   fastify.get("/hello", async (request, _reply) => {
     const { name = "World" } = (request.query as { name?: string }) || {};

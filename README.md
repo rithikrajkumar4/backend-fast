@@ -117,3 +117,41 @@ npm run start:prod
 | `GET` | `/api/v1/hello?name=...` | Sample GET greeting endpoint |
 | `POST` | `/api/v1/echo` | Sample POST endpoint echoing JSON payload |
 
+
+---
+
+## 🖼 Albums, S3 Image Uploads & Sharing
+
+Users collect images into **albums**, add **friends** by username, and share albums via **public links**. Image bytes go straight from the app to S3 using presigned POSTs, so they never pass through this server. Images are served through CloudFront.
+
+### Upload flow (swipe to select)
+
+The app shows gallery images one at a time. Swipe **right** to select an image and swipe **left** to skip it. Only the selected images are sent, in the order they were picked.
+
+1. `POST /api/v1/albums/:albumId/uploads` with `{ "files": [{ "fileName", "contentType", "sizeBytes" }] }`. The response has one `{ imageId, upload: { url, fields } }` per file.
+2. For each file, `POST` a `multipart/form-data` body to `upload.url`: every entry of `upload.fields` first, then the image as `file` (last). S3 enforces the key, content type and size limit.
+3. `POST /api/v1/albums/:albumId/uploads/complete` with `{ "imageIds": [...] }`. The server checks S3 and returns `uploaded` and `failed` lists. Failed images can be retried while their upload URL is still valid.
+
+Allowed types: JPEG, PNG, WebP, HEIC/HEIF, GIF and AVIF. The defaults are 20 MB per image and 50 images per batch (`UPLOAD_MAX_BYTES`, `UPLOAD_MAX_FILES`).
+
+### Endpoints (all require `Authorization: Bearer <accessToken>` except `/shared`)
+
+| Method | Path | Who |
+|---|---|---|
+| POST / GET | `/api/v1/albums` | any user (create / list owned and shared albums) |
+| GET / PATCH / DELETE | `/api/v1/albums/:albumId` | viewer / editor / owner |
+| POST | `/api/v1/albums/:albumId/uploads` and `/uploads/complete` | editor |
+| PUT | `/api/v1/albums/:albumId/images/order` with `{ imageIds }` (the full new order) | editor |
+| DELETE | `/api/v1/albums/:albumId/images/:imageId` | editor |
+| GET / POST | `/api/v1/albums/:albumId/members` with `{ username, role: "viewer" \| "editor" }` | viewer / owner |
+| PATCH / DELETE | `/api/v1/albums/:albumId/members/:userId` | owner (members can remove themselves to leave) |
+| POST / GET | `/api/v1/albums/:albumId/share-links` with optional `{ expiresInHours }` | editor |
+| DELETE | `/api/v1/albums/:albumId/share-links/:linkId` | editor |
+| GET | `/api/v1/shared/:token` | **public**, no login |
+
+### AWS setup
+
+- **S3 bucket**: keep it private (Block Public Access on). If a *web* client will upload, add a CORS rule that allows `POST` from your origin. Native apps don't need CORS.
+- **CloudFront**: use the bucket as the origin with Origin Access Control, and set `CDN_BASE_URL` to the distribution URL.
+- **Signed CDN URLs (optional)**: create a CloudFront key group, enable *Restrict viewer access* on the distribution, and set `CLOUDFRONT_KEY_PAIR_ID` and `CLOUDFRONT_PRIVATE_KEY`. Image URLs then expire after `CDN_URL_TTL_SECONDS`. Without this, image URLs are unguessable but permanent.
+- **IAM**: the server needs `s3:PutObject`, `s3:GetObject` (for HeadObject) and `s3:DeleteObject` on `arn:aws:s3:::<bucket>/albums/*`.

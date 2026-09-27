@@ -5,13 +5,17 @@ import { User } from "./entities/user.entity.js";
 import { Otp } from "./entities/otp.entity.js";
 import { UserSession } from "./entities/session.entity.js";
 import { ActivityLog } from "./entities/activity-log.entity.js";
+import { Album } from "./entities/album.entity.js";
+import { Image } from "./entities/image.entity.js";
+import { AlbumMember } from "./entities/album-member.entity.js";
+import { ShareLink } from "./entities/share-link.entity.js";
 
 const getDataSourceOptions = (): DataSourceOptions => {
   const baseOptions = {
     type: "postgres" as const,
     synchronize: env.DB_SYNC,
     logging: env.DB_LOG,
-    entities: [User, Otp, UserSession, ActivityLog],
+    entities: [User, Otp, UserSession, ActivityLog, Album, Image, AlbumMember, ShareLink],
     extra: {
       max: env.DB_MAX_CONNECTIONS,
     },

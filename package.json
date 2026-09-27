@@ -13,7 +13,9 @@
     "start:local": "node --env-file=.env.local dist/server.js",
     "start:prod": "node --env-file=.env.prod dist/server.js",
     "typecheck": "tsc --noEmit",
-    "test": "tsx scripts/test-runner.js"
+    "test": "tsx scripts/test-runner.js",
+    "test:integration": "tsx --test --test-concurrency=1 tests/*.test.ts",
+    "test:load": "tsx tests/load/autocannon.ts"
   },
   "keywords": [
     "fastify",
@@ -40,9 +42,11 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/autocannon": "^7.12.7",
     "@types/morgan": "^1.9.10",
     "@types/node": "^22.13.4",
     "@types/pg": "^8.23.1",
+    "autocannon": "^8.0.0",
     "nodemon": "^3.1.14",
     "pino-pretty": "^13.0.0",
     "rimraf": "^6.0.1",

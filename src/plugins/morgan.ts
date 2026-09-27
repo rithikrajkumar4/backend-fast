@@ -4,7 +4,7 @@ import morgan from "morgan";
 import { env } from "../config/env.js";
 
 async function morganPluginAsync(fastify: FastifyInstance) {
-  const logger = morgan(env.MORGAN_FORMAT);
+  const logger = morgan(env.MORGAN_FORMAT, { skip: () => env.NODE_ENV === "test" });
 
   fastify.addHook("onRequest", (request, reply, done) => {
     logger(request.raw, reply.raw, (err) => {

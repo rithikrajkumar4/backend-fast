@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import type { StorageService } from "../src/services/storage.service.js";
 
 // Must be set before src/config/env.ts is evaluated (dotenv never overrides existing vars).
 process.env.NODE_ENV = "test";
@@ -8,12 +9,18 @@ process.env.DB_SYNC = "true";
 process.env.DB_LOG = "false";
 process.env.JWT_SECRET = "test-jwt-secret-key-12345";
 process.env.DEFAULT_OTP = "123456";
+process.env.S3_BUCKET = "test-bucket";
+process.env.AWS_REGION = "us-east-1";
+process.env.CDN_BASE_URL = "https://cdn.example.test";
+process.env.SHARE_BASE_URL = "https://app.example.test/s";
+process.env.AWS_ACCESS_KEY_ID ??= "AKIATESTTESTTESTTEST";
+process.env.AWS_SECRET_ACCESS_KEY ??= "test-secret-access-key";
 
 export const OTP = "123456";
 
-export async function buildTestApp(): Promise<FastifyInstance> {
+export async function buildTestApp(deps: { storage?: StorageService } = {}): Promise<FastifyInstance> {
   const { buildApp } = await import("../src/app.js");
-  const app = await buildApp({ logger: false });
+  const app = await buildApp({ logger: false }, deps);
   await app.ready();
   if (!app.db.isInitialized) {
     await app.close();

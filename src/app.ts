@@ -8,9 +8,19 @@ import { sensiblePlugin } from "./plugins/sensible.js";
 import { jwtPlugin } from "./plugins/jwt.js";
 import { activityTrackerPlugin } from "./plugins/activity-tracker.js";
 import { errorHandlerPlugin } from "./plugins/error-handler.js";
+import { storagePlugin } from "./plugins/storage.js";
+import { mediaCleanupPlugin } from "./plugins/media-cleanup.js";
+import type { StorageService } from "./services/storage.service.js";
 import { rootRoutes } from "./routes/root.js";
 
-export async function buildApp(opts: FastifyServerOptions = {}): Promise<FastifyInstance> {
+export interface AppDependencies {
+  storage?: StorageService;
+}
+
+export async function buildApp(
+  opts: FastifyServerOptions = {},
+  deps: AppDependencies = {}
+): Promise<FastifyInstance> {
   const loggerConfig =
     env.NODE_ENV === "development"
       ? {
@@ -45,6 +55,8 @@ export async function buildApp(opts: FastifyServerOptions = {}): Promise<Fastify
   await app.register(sensiblePlugin);
   await app.register(jwtPlugin);
   await app.register(activityTrackerPlugin);
+  await app.register(storagePlugin, { storage: deps.storage });
+  await app.register(mediaCleanupPlugin);
 
   // Register Application Routes
   await app.register(rootRoutes);

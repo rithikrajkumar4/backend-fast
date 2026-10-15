@@ -11,7 +11,9 @@ const STATUS_NAMES: Record<number, string> = {
   409: "Conflict",
   410: "Gone",
   422: "Unprocessable Entity",
+  429: "Too Many Requests",
   500: "Internal Server Error",
+  502: "Bad Gateway",
   503: "Service Unavailable",
 };
 

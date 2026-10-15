@@ -120,6 +120,53 @@ npm run start:prod
 
 ---
 
+## 🔐 Authentication
+
+Users sign in with a **phone number** (code by SMS or WhatsApp), an **email** (code by email), or **Google / Apple / Facebook**. Everything is configured at runtime from the admin panel, with no redeploy needed.
+
+### Admin panel
+
+1. Create an admin: `npm run admin:create -- --email you@example.com --password 'at-least-10-chars'` (run it again to reset a password).
+2. Open `http://localhost:3000/admin` and sign in.
+
+From the panel you can turn each login method on or off, and set the OTP policy (length, expiry, attempts, resend cooldown, hourly cap). You also enter the SSO client IDs and the delivery provider credentials there, add fixed-code **test accounts** for App Store / Play Store review, and send test messages. Provider secrets are encrypted in the database (`CONFIG_ENCRYPTION_KEY`) and are never returned by the API. Set `ADMIN_PANEL_ENABLED=false` to turn the panel and its API off.
+
+| Channel | Providers |
+|---|---|
+| Email | Console (log only), SMTP (works with SES, SendGrid, Postmark, Gmail…) |
+| SMS | Console, Twilio |
+| WhatsApp | Console, Twilio (Content SID template), Meta WhatsApp Cloud API (authentication template) |
+
+Outside production every code is `DEFAULT_OTP` and is returned as `data.otp`. In production codes are random, stored as an HMAC, and never returned.
+
+### App flow
+
+1. `GET /api/v1/auth/config`: which methods are on, phone channels, OTP length, and the public Google/Apple/Facebook IDs. Build the login screen from this.
+2. Sign in with either:
+   - **OTP**: `POST /auth/send-otp` with `{ phoneNumber, channel?: "sms" | "whatsapp" }` or `{ email }`, then `POST /auth/verify-otp` with the same identifier and `otp`.
+   - **SSO**: sign in with the provider's native SDK, then `POST /auth/sso/:provider` (`google`, `apple`, `facebook`) with `{ idToken }`. For Facebook classic login, send `{ accessToken }`. Optional: `nonce` (raw), and `name` (Apple only shares it on first sign-in).
+3. Both return either `isNewUser: false` with `user` + `tokens`, or `isNewUser: true` with a `tempToken`, a `suggestedUsername` and, after SSO, a `prefill` of `{ name, email }`.
+4. New users finish with `POST /auth/complete-profile` with `{ tempToken, name, age, username?, email? }`.
+
+**Account linking:** a Google/Apple sign-in whose *verified* email matches a user's *verified* email signs into that user (this can be switched off). Facebook emails are never trusted for linking. An email-OTP login never opens an account whose email was typed in but not verified.
+
+| Method | Path | Notes |
+|---|---|---|
+| `GET` | `/api/v1/auth/config` | public |
+| `POST` | `/api/v1/auth/send-otp` | 10/min per IP; cooldown and hourly cap per identifier |
+| `POST` | `/api/v1/auth/verify-otp` | 20/min per IP; code burns after `maxAttempts` wrong guesses |
+| `POST` | `/api/v1/auth/sso/:provider` | 20/min per IP |
+| `POST` | `/api/v1/auth/complete-profile` | |
+| `POST` | `/api/v1/auth/refresh-token`, `/logout` · `GET` `/me`, `/activity` | logout revokes the access token immediately |
+| `POST` | `/api/admin/auth/login` | admin token (separate from user tokens) |
+| `GET` / `PUT` | `/api/admin/settings/auth` | secrets: `""` keeps, `null` clears |
+| `POST` | `/api/admin/settings/auth/test-delivery` | `{ channel, to }` |
+| `GET` | `/api/admin/overview` | user and delivery counts |
+
+**Production database:** with `DB_SYNC=false`, apply the schema changes yourself: `users."phoneNumber"` becomes nullable, plus a new `users."emailVerified"` column and the `verification_codes`, `auth_identities`, `app_settings` and `admin_users` tables. The old `otps` table is no longer used.
+
+---
+
 ## 🖼 Albums, S3 Image Uploads & Sharing
 
 Users collect images into **albums**, add **friends** by username, and share albums via **public links**. Image bytes go straight from the app to S3 using presigned POSTs, so they never pass through this server. Images are served through CloudFront.

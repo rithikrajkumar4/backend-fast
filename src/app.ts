@@ -10,11 +10,18 @@ import { activityTrackerPlugin } from "./plugins/activity-tracker.js";
 import { errorHandlerPlugin } from "./plugins/error-handler.js";
 import { storagePlugin } from "./plugins/storage.js";
 import { mediaCleanupPlugin } from "./plugins/media-cleanup.js";
+import { rateLimitPlugin } from "./plugins/rate-limit.js";
+import { authProvidersPlugin } from "./plugins/auth-providers.js";
+import { adminPanelPlugin } from "./plugins/admin-panel.js";
 import type { StorageService } from "./services/storage.service.js";
+import type { OtpSender } from "./services/delivery.service.js";
+import type { IdentityVerifier } from "./services/identity-verifier.service.js";
 import { rootRoutes } from "./routes/root.js";
 
 export interface AppDependencies {
   storage?: StorageService;
+  otpSender?: OtpSender;
+  identityVerifier?: IdentityVerifier;
 }
 
 export async function buildApp(
@@ -53,13 +60,19 @@ export async function buildApp(
   await app.register(morganPlugin);
   await app.register(typeormPlugin);
   await app.register(sensiblePlugin);
+  await app.register(rateLimitPlugin);
   await app.register(jwtPlugin);
+  await app.register(authProvidersPlugin, {
+    otpSender: deps.otpSender,
+    identityVerifier: deps.identityVerifier,
+  });
   await app.register(activityTrackerPlugin);
   await app.register(storagePlugin, { storage: deps.storage });
   await app.register(mediaCleanupPlugin);
 
   // Register Application Routes
   await app.register(rootRoutes);
+  await app.register(adminPanelPlugin);
 
   // 404 Handler
   app.setNotFoundHandler((request, reply) => {

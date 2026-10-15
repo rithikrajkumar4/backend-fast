@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="robots" content="noindex" />
+  <title>Admin · Auth settings</title>
+  <link rel="stylesheet" href="/admin/admin.css" />
+</head>
+<body>
+  <!-- ======================= Login ======================= -->
+  <main id="login-view" class="login" hidden>
+    <form id="login-form" class="login-card" novalidate>
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Admin</div>
+      <h1>Sign in</h1>
+      <p class="muted">Manage how users sign in to the app.</p>
+      <label class="field">
+        <span>Email</span>
+        <input type="email" name="email" autocomplete="username" required />
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input type="password" name="password" autocomplete="current-password" required />
+      </label>
+      <p class="form-error" id="login-error" role="alert" hidden></p>
+      <button type="submit" class="btn primary block">Sign in</button>
+      <p class="hint">No admin yet? Run <code>npm run admin:create -- --email … --password …</code> on the server.</p>
+    </form>
+  </main>
+
+  <!-- ======================= App ======================= -->
+  <div id="app-view" class="shell" hidden>
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Admin</div>
+      <nav class="nav" aria-label="Sections">
+        <a href="#overview" data-section="overview">Overview</a>
+        <a href="#methods" data-section="methods">Login methods</a>
+        <a href="#otp" data-section="otp">OTP &amp; security</a>
+        <a href="#sso" data-section="sso">Social sign-in</a>
+        <a href="#delivery" data-section="delivery">Delivery providers</a>
+        <a href="#test-accounts" data-section="test-accounts">Test accounts</a>
+        <a href="#account" data-section="account">Your account</a>
+      </nav>
+      <div class="sidebar-foot">
+        <span id="admin-email" class="muted small"></span>
+        <button type="button" class="btn ghost small" id="logout-btn">Sign out</button>
+      </div>
+    </aside>
+
+    <main class="content">
+      <!-- Overview -->
+      <section class="panel" id="section-overview" data-section="overview">
+        <header class="panel-head">
+          <h1>Overview</h1>
+          <p class="muted">What's enabled for the app right now, and recent sign-in activity.</p>
+        </header>
+        <div id="warnings" class="callouts"></div>
+        <h2 class="sub">Login methods</h2>
+        <div id="method-chips" class="chips"></div>
+        <h2 class="sub">Users</h2>
+        <div id="stats-users" class="stats"></div>
+        <h2 class="sub">Codes sent in the last 24 hours</h2>
+        <div id="stats-codes" class="stats"></div>
+      </section>
+
+      <!-- Login methods -->
+      <section class="panel" id="section-methods" data-section="methods">
+        <header class="panel-head">
+          <h1>Login methods</h1>
+          <p class="muted">The app reads these from <code>GET /api/v1/auth/config</code> to decide which options to show.</p>
+        </header>
+
+        <div class="card">
+          <label class="field">
+            <span>App name</span>
+            <input type="text" data-path="appName" maxlength="60" />
+            <small>Shown in verification messages: "Your <em>App name</em> verification code is 123456".</small>
+          </label>
+        </div>
+
+        <div class="card">
+          <div class="card-row">
+            <div>
+              <h3>Email</h3>
+              <p class="muted">One-time code sent by email.</p>
+            </div>
+            <label class="switch"><input type="checkbox" data-path="email.enabled" /><span></span></label>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-row">
+            <div>
+              <h3>Phone number</h3>
+              <p class="muted">One-time code sent by SMS or WhatsApp.</p>
+            </div>
+            <label class="switch"><input type="checkbox" data-path="phone.enabled" /><span></span></label>
+          </div>
+          <div class="card-body" data-show-if="phone.enabled=true">
+            <div class="check-row">
+              <label class="check"><input type="checkbox" data-path="phone.sms" /> SMS</label>
+              <label class="check"><input type="checkbox" data-path="phone.whatsapp" /> WhatsApp</label>
+            </div>
+            <div class="grid-2">
+              <label class="field">
+                <span>Default channel</span>
+                <select data-path="phone.defaultChannel">
+                  <option value="sms">SMS</option>
+                  <option value="whatsapp">WhatsApp</option>
+                </select>
+                <small>Used when the app doesn't ask for a channel.</small>
+              </label>
+              <label class="field">
+                <span>Default country code</span>
+                <input type="text" data-path="phone.defaultCountryCode" placeholder="+91" maxlength="5" />
+                <small>Added to numbers entered without a leading +.</small>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <p class="muted small">Google, Apple and Facebook are under <a href="#sso">Social sign-in</a>.</p>
+      </section>
+
+      <!-- OTP -->
+      <section class="panel" id="section-otp" data-section="otp">
+        <header class="panel-head">
+          <h1>OTP &amp; security</h1>
+          <p class="muted">Applies to email, SMS and WhatsApp codes.</p>
+        </header>
+        <div class="card grid-2">
+          <label class="field">
+            <span>Code length</span>
+            <input type="number" data-path="otp.length" data-type="number" min="4" max="8" />
+            <small>4 to 8 digits.</small>
+          </label>
+          <label class="field">
+            <span>Code expires after (seconds)</span>
+            <input type="number" data-path="otp.ttlSeconds" data-type="number" min="60" max="3600" />
+            <small>60 to 3600.</small>
+          </label>
+          <label class="field">
+            <span>Wrong attempts allowed</span>
+            <input type="number" data-path="otp.maxAttempts" data-type="number" min="1" max="20" />
+            <small>The code stops working after this many wrong guesses.</small>
+          </label>
+          <label class="field">
+            <span>Resend cooldown (seconds)</span>
+            <input type="number" data-path="otp.resendCooldownSeconds" data-type="number" min="0" max="600" />
+            <small>Minimum wait before another code to the same number or email.</small>
+          </label>
+          <label class="field">
+            <span>Codes per hour, per number or email</span>
+            <input type="number" data-path="otp.maxSendsPerHour" data-type="number" min="1" max="1000" />
+            <small>Limits SMS cost abuse. Each IP is also limited per minute.</small>
+          </label>
+        </div>
+      </section>
+
+      <!-- SSO -->
+      <section class="panel" id="section-sso" data-section="sso">
+        <header class="panel-head">
+          <h1>Social sign-in</h1>
+          <p class="muted">The app signs in with each provider's native SDK and sends the token to <code>POST /api/v1/auth/sso/:provider</code>.</p>
+        </header>
+
+        <div class="card">
+          <div class="card-row">
+            <div>
+              <h3>Google</h3>
+              <p class="muted">Verifies Google ID tokens.</p>
+            </div>
+            <label class="switch"><input type="checkbox" data-path="sso.google.enabled" /><span></span></label>
+          </div>
+          <div class="card-body" data-show-if="sso.google.enabled=true">
+            <label class="field">
+              <span>OAuth client IDs</span>
+              <textarea data-path="sso.google.clientIds" data-type="lines" rows="3" placeholder="1234-abc.apps.googleusercontent.com"></textarea>
+              <small>One per line: the Web, iOS and Android client IDs your app uses. A token is accepted when its audience matches any of them.</small>
+            </label>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-row">
+            <div>
+              <h3>Apple</h3>
+              <p class="muted">Verifies Sign in with Apple identity tokens.</p>
+            </div>
+            <label class="switch"><input type="checkbox" data-path="sso.apple.enabled" /><span></span></label>
+          </div>
+          <div class="card-body" data-show-if="sso.apple.enabled=true">
+            <label class="field">
+              <span>Bundle IDs / Services IDs</span>
+              <textarea data-path="sso.apple.clientIds" data-type="lines" rows="2" placeholder="com.example.app"></textarea>
+              <small>One per line: the iOS bundle ID, plus the Services ID if you use Apple sign-in on Android or web.</small>
+            </label>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-row">
+            <div>
+              <h3>Facebook</h3>
+              <p class="muted">Verifies Facebook access tokens and iOS Limited Login tokens.</p>
+            </div>
+            <label class="switch"><input type="checkbox" data-path="sso.facebook.enabled" /><span></span></label>
+          </div>
+          <div class="card-body grid-2" data-show-if="sso.facebook.enabled=true">
+            <label class="field">
+              <span>App ID</span>
+              <input type="text" data-path="sso.facebook.appId" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span>App secret</span>
+              <input type="password" data-secret="sso.facebook.appSecret" autocomplete="new-password" />
+              <small class="secret-state" data-secret-state="sso.facebook.appSecret"></small>
+            </label>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-row">
+            <div>
+              <h3>Link accounts by verified email</h3>
+              <p class="muted">When a Google or Apple account's verified email matches a user's verified email, sign into that user instead of creating a new one. Facebook emails are never used for linking.</p>
+            </div>
+            <label class="switch"><input type="checkbox" data-path="sso.autoLinkByVerifiedEmail" /><span></span></label>
+          </div>
+        </div>
+      </section>
+
+      <!-- Delivery -->
+      <section class="panel" id="section-delivery" data-section="delivery">
+        <header class="panel-head">
+          <h1>Delivery providers</h1>
+          <p class="muted">Where codes are sent from. <strong>Console</strong> only writes codes to the server log, for development.</p>
+        </header>
+
+        <!-- Email -->
+        <div class="card">
+          <h3>Email</h3>
+          <div class="grid-2">
+            <label class="field">
+              <span>Provider</span>
+              <select data-path="delivery.email.provider">
+                <option value="console">Console (log only)</option>
+                <option value="smtp">SMTP</option>
+              </select>
+            </label>
+            <label class="field" data-show-if="delivery.email.provider=smtp">
+              <span>From</span>
+              <input type="text" data-path="delivery.email.from" placeholder="App &lt;no-reply@example.com&gt;" />
+            </label>
+          </div>
+          <div class="grid-2" data-show-if="delivery.email.provider=smtp">
+            <label class="field">
+              <span>SMTP host</span>
+              <input type="text" data-path="delivery.email.smtp.host" placeholder="smtp.sendgrid.net" />
+            </label>
+            <label class="field">
+              <span>Port</span>
+              <input type="number" data-path="delivery.email.smtp.port" data-type="number" min="1" max="65535" />
+            </label>
+            <label class="field">
+              <span>Username</span>
+              <input type="text" data-path="delivery.email.smtp.user" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span>Password</span>
+              <input type="password" data-secret="delivery.email.smtp.password" autocomplete="new-password" />
+              <small class="secret-state" data-secret-state="delivery.email.smtp.password"></small>
+            </label>
+            <label class="check"><input type="checkbox" data-path="delivery.email.smtp.secure" /> Use TLS from the start (port 465)</label>
+          </div>
+          <div class="test-row">
+            <input type="email" placeholder="you@example.com" data-test-to="email" aria-label="Test email recipient" />
+            <button type="button" class="btn small" data-test-channel="email">Send test email</button>
+          </div>
+        </div>
+
+        <!-- SMS -->
+        <div class="card">
+          <h3>SMS</h3>
+          <label class="field">
+            <span>Provider</span>
+            <select data-path="delivery.sms.provider">
+              <option value="console">Console (log only)</option>
+              <option value="twilio">Twilio</option>
+            </select>
+          </label>
+          <label class="field" data-show-if="delivery.sms.provider=twilio">
+            <span>Twilio SMS sender</span>
+            <input type="text" data-path="delivery.twilio.smsFrom" placeholder="+14155550123 or MGxxxxxxxx" />
+            <small>A Twilio phone number, or a Messaging Service SID (starts with MG).</small>
+          </label>
+          <div class="test-row">
+            <input type="tel" placeholder="+14155550123" data-test-to="sms" aria-label="Test SMS recipient" />
+            <button type="button" class="btn small" data-test-channel="sms">Send test SMS</button>
+          </div>
+        </div>
+
+        <!-- WhatsApp -->
+        <div class="card">
+          <h3>WhatsApp</h3>
+          <label class="field">
+            <span>Provider</span>
+            <select data-path="delivery.whatsapp.provider">
+              <option value="console">Console (log only)</option>
+              <option value="twilio">Twilio</option>
+              <option value="meta">Meta WhatsApp Cloud API</option>
+            </select>
+          </label>
+          <div class="grid-2" data-show-if="delivery.whatsapp.provider=twilio">
+            <label class="field">
+              <span>Twilio WhatsApp sender</span>
+              <input type="text" data-path="delivery.twilio.whatsappFrom" placeholder="+14155550123" />
+            </label>
+            <label class="field">
+              <span>Content SID (template)</span>
+              <input type="text" data-path="delivery.twilio.whatsappContentSid" placeholder="HXxxxxxxxx" />
+              <small>Approved template with <code>{{1}}</code> as the code. Leave empty only for the Twilio sandbox.</small>
+            </label>
+          </div>
+          <div data-show-if="delivery.whatsapp.provider=meta">
+            <div class="grid-2">
+              <label class="field">
+                <span>Phone number ID</span>
+                <input type="text" data-path="delivery.meta.phoneNumberId" autocomplete="off" />
+              </label>
+              <label class="field">
+                <span>Access token</span>
+                <input type="password" data-secret="delivery.meta.accessToken" autocomplete="new-password" />
+                <small class="secret-state" data-secret-state="delivery.meta.accessToken"></small>
+              </label>
+              <label class="field">
+                <span>Authentication template name</span>
+                <input type="text" data-path="delivery.meta.templateName" placeholder="login_code" />
+              </label>
+              <label class="field">
+                <span>Template language</span>
+                <input type="text" data-path="delivery.meta.templateLanguage" placeholder="en_US" />
+              </label>
+              <label class="field">
+                <span>Graph API version</span>
+                <input type="text" data-path="delivery.meta.graphApiVersion" placeholder="v22.0" />
+              </label>
+            </div>
+            <label class="check"><input type="checkbox" data-path="delivery.meta.copyCodeButton" /> Template has a copy-code button</label>
+          </div>
+          <div class="test-row">
+            <input type="tel" placeholder="+14155550123" data-test-to="whatsapp" aria-label="Test WhatsApp recipient" />
+            <button type="button" class="btn small" data-test-channel="whatsapp">Send test WhatsApp</button>
+          </div>
+        </div>
+
+        <!-- Twilio account -->
+        <div class="card" data-show-if="delivery.sms.provider=twilio|delivery.whatsapp.provider=twilio">
+          <h3>Twilio account</h3>
+          <p class="muted">Shared by SMS and WhatsApp.</p>
+          <div class="grid-2">
+            <label class="field">
+              <span>Account SID</span>
+              <input type="text" data-path="delivery.twilio.accountSid" placeholder="ACxxxxxxxx" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span>Auth token</span>
+              <input type="password" data-secret="delivery.twilio.authToken" autocomplete="new-password" />
+              <small class="secret-state" data-secret-state="delivery.twilio.authToken"></small>
+            </label>
+          </div>
+        </div>
+        <p class="muted small">Test messages use the <strong>saved</strong> settings. Save your changes first.</p>
+      </section>
+
+      <!-- Test accounts -->
+      <section class="panel" id="section-test-accounts" data-section="test-accounts">
+        <header class="panel-head">
+          <h1>Test accounts</h1>
+          <p class="muted">Phone numbers or emails that always accept a fixed code, and never get a message. Use these for App Store and Play Store review.</p>
+        </header>
+        <div class="card">
+          <div id="test-accounts" class="rows"></div>
+          <button type="button" class="btn small" id="add-test-account">Add test account</button>
+        </div>
+      </section>
+
+      <!-- Account -->
+      <section class="panel" id="section-account" data-section="account">
+        <header class="panel-head">
+          <h1>Your account</h1>
+        </header>
+        <form id="password-form" class="card" novalidate>
+          <h3>Change password</h3>
+          <div class="grid-2">
+            <label class="field">
+              <span>Current password</span>
+              <input type="password" name="currentPassword" autocomplete="current-password" required />
+            </label>
+            <label class="field">
+              <span>New password</span>
+              <input type="password" name="newPassword" autocomplete="new-password" minlength="10" required />
+              <small>At least 10 characters.</small>
+            </label>
+          </div>
+          <button type="submit" class="btn">Update password</button>
+        </form>
+      </section>
+
+      <div class="savebar" id="savebar" hidden>
+        <span id="savebar-text">You have unsaved changes</span>
+        <div class="savebar-actions">
+          <button type="button" class="btn ghost" id="discard-btn">Discard</button>
+          <button type="button" class="btn primary" id="save-btn">Save changes</button>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <template id="test-account-row">
+    <div class="row">
+      <input type="text" class="ta-identifier" placeholder="+14155550123 or reviewer@example.com" aria-label="Phone number or email" />
+      <input type="text" class="ta-code" inputmode="numeric" placeholder="Code" aria-label="Fixed code" maxlength="8" />
+      <button type="button" class="btn ghost small ta-remove" aria-label="Remove test account">Remove</button>
+    </div>
+  </template>
+
+  <script src="/admin/admin.js" defer></script>
+</body>
+</html>

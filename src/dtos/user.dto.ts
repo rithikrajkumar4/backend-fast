@@ -18,11 +18,12 @@ export interface UpdateUserDto {
 
 export interface UserResponseDto {
   id: string;
-  phoneNumber: string;
+  phoneNumber: string | null;
   username: string;
   name: string;
   age: number;
   email?: string | null;
+  emailVerified: boolean;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;

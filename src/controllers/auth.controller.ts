@@ -1,5 +1,6 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
-import { AuthService } from "../services/auth.service.js";
+import { AuthService, type LoginResult } from "../services/auth.service.js";
+import { SettingsService } from "../services/settings.service.js";
 import { UsernameService } from "../services/username.service.js";
 import { SessionService } from "../services/session.service.js";
 import { User } from "../database/entities/user.entity.js";
@@ -13,30 +14,76 @@ import type {
   RefreshTokenDto,
   CheckUsernameDto,
   GetActivityQueryDto,
+  SsoLoginDto,
+  SsoProviderParamsDto,
+  ClientType,
 } from "../dtos/index.js";
+
+function getClientType(request: FastifyRequest, bodyClientType?: ClientType): ClientType {
+  return bodyClientType || (request.headers["x-client-type"] === "app" ? "app" : "web");
+}
+
+function getSessionMeta(request: FastifyRequest) {
+  return {
+    ipAddress: (request.headers["x-forwarded-for"] as string) || request.ip || null,
+    userAgent: (request.headers["user-agent"] as string) || null,
+  };
+}
+
+function sendLoginResult(reply: FastifyReply, result: LoginResult, newUserMessage: string) {
+  if (result.isNewUser) {
+    return reply.status(200).send({
+      success: true,
+      isNewUser: true,
+      message: newUserMessage,
+      data: {
+        ...(result.phoneNumber ? { phoneNumber: result.phoneNumber } : {}),
+        ...(result.email ? { email: result.email } : {}),
+        suggestedUsername: result.suggestedUsername,
+        tempToken: result.tempToken,
+        ...(result.prefill ? { prefill: result.prefill } : {}),
+      },
+    });
+  }
+
+  return reply.status(200).send({
+    success: true,
+    isNewUser: false,
+    message: "Login successful",
+    data: {
+      user: result.user,
+      tokens: result.tokens,
+    },
+  });
+}
 
 export class AuthController {
   /**
-   * Send 6-digit OTP to phone number
+   * Login options enabled by the admin (methods, channels, SSO client IDs). Public, no secrets.
+   */
+  public static async getConfig(request: FastifyRequest, _reply: FastifyReply) {
+    const settings = await SettingsService.getAuthSettings(request.server);
+    return {
+      success: true,
+      data: SettingsService.toPublicConfig(settings),
+    };
+  }
+
+  /**
+   * Send an OTP to a phone number (SMS / WhatsApp) or an email
    */
   public static async sendOtp(
     request: FastifyRequest<{ Body: SendOtpDto }>,
     reply: FastifyReply
   ) {
-    const { phoneNumber } = request.body;
-    const result = await AuthService.sendOtp(phoneNumber, request.server);
+    const result = await AuthService.sendOtp(request.body, request.server);
 
     return reply.status(200).send({
       success: true,
       message: result.isNewUser
         ? "OTP sent. User is not registered yet."
         : "OTP sent. Welcome back!",
-      data: {
-        phoneNumber: result.phoneNumber,
-        isNewUser: result.isNewUser,
-        otp: result.otp,
-        expiresAt: result.expiresAt,
-      },
+      data: result,
     });
   }
 
@@ -47,46 +94,42 @@ export class AuthController {
     request: FastifyRequest<{ Body: VerifyOtpDto }>,
     reply: FastifyReply
   ) {
-    const { phoneNumber, otp, clientType: bodyClientType } = request.body;
-    const clientType =
-      bodyClientType ||
-      (request.headers["x-client-type"] === "app" ? "app" : "web");
-
-    const meta = {
-      ipAddress: (request.headers["x-forwarded-for"] as string) || request.ip || null,
-      userAgent: (request.headers["user-agent"] as string) || null,
-    };
-
+    const { clientType, ...input } = request.body;
     const result = await AuthService.verifyOtp(
-      phoneNumber,
-      otp,
-      clientType,
-      meta,
+      input,
+      getClientType(request, clientType),
+      getSessionMeta(request),
       request.server
     );
 
-    if (result.isNewUser) {
-      return reply.status(200).send({
-        success: true,
-        isNewUser: true,
-        message: "OTP verified. Please complete your profile with name, age, and username.",
-        data: {
-          phoneNumber: result.phoneNumber,
-          suggestedUsername: result.suggestedUsername,
-          tempToken: result.tempToken,
-        },
-      });
-    }
+    return sendLoginResult(
+      reply,
+      result,
+      "OTP verified. Please complete your profile with name, age, and username."
+    );
+  }
 
-    return reply.status(200).send({
-      success: true,
-      isNewUser: false,
-      message: "Login successful",
-      data: {
-        user: result.user,
-        tokens: result.tokens,
-      },
-    });
+  /**
+   * Sign in with Google, Apple or Facebook using a token obtained by the app's native SDK
+   */
+  public static async ssoLogin(
+    request: FastifyRequest<{ Params: SsoProviderParamsDto; Body: SsoLoginDto }>,
+    reply: FastifyReply
+  ) {
+    const { clientType, ...credentials } = request.body;
+    const result = await AuthService.ssoLogin(
+      request.params.provider,
+      credentials,
+      getClientType(request, clientType),
+      getSessionMeta(request),
+      request.server
+    );
+
+    return sendLoginResult(
+      reply,
+      result,
+      "Sign-in verified. Please complete your profile with name, age, and username."
+    );
   }
 
   /**
@@ -96,15 +139,7 @@ export class AuthController {
     request: FastifyRequest<{ Body: CompleteProfileDto }>,
     reply: FastifyReply
   ) {
-    const { tempToken, name, age, username, email, clientType: bodyClientType } = request.body;
-    const clientType =
-      bodyClientType ||
-      (request.headers["x-client-type"] === "app" ? "app" : "web");
-
-    const meta = {
-      ipAddress: (request.headers["x-forwarded-for"] as string) || request.ip || null,
-      userAgent: (request.headers["user-agent"] as string) || null,
-    };
+    const { tempToken, name, age, username, email, clientType } = request.body;
 
     const result = await AuthService.completeProfile(
       {
@@ -113,8 +148,8 @@ export class AuthController {
         age,
         username,
         email,
-        clientType,
-        meta,
+        clientType: getClientType(request, clientType),
+        meta: getSessionMeta(request),
       },
       request.server
     );
@@ -173,14 +208,10 @@ export class AuthController {
     _reply: FastifyReply
   ) {
     const { refreshToken } = request.body;
-    const meta = {
-      ipAddress: (request.headers["x-forwarded-for"] as string) || request.ip || null,
-      userAgent: (request.headers["user-agent"] as string) || null,
-    };
 
     const result = await SessionService.refreshSession(
       refreshToken,
-      meta,
+      getSessionMeta(request),
       request.server
     );
 

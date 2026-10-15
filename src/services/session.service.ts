@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
-import type { Repository } from "typeorm";
+import type { EntityManager, Repository } from "typeorm";
 import { MoreThan } from "typeorm";
 import { UserSession, type ClientType } from "../database/entities/session.entity.js";
 import { User } from "../database/entities/user.entity.js";
@@ -40,6 +40,22 @@ export class SessionService {
     return crypto.randomBytes(48).toString("hex");
   }
 
+  private static signAccessToken(
+    user: User,
+    sessionId: string,
+    clientType: ClientType,
+    fastify: FastifyInstance
+  ): string {
+    return fastify.jwt.sign({
+      id: user.id,
+      sessionId,
+      clientType,
+      username: user.username,
+      ...(user.phoneNumber ? { phoneNumber: user.phoneNumber } : {}),
+      ...(user.email ? { email: user.email } : {}),
+    });
+  }
+
   /**
    * Creates a new user session, generates access & refresh tokens, and stores the session in DB.
    */
@@ -47,9 +63,10 @@ export class SessionService {
     user: User,
     clientType: ClientType = "web",
     meta: SessionMetadata,
-    fastify: FastifyInstance
+    fastify: FastifyInstance,
+    manager: EntityManager = fastify.db.manager
   ): Promise<AuthTokens> {
-    const sessionRepository: Repository<UserSession> = fastify.db.getRepository(UserSession);
+    const sessionRepository: Repository<UserSession> = manager.getRepository(UserSession);
     const refreshToken = this.generateRefreshToken();
     const refreshTokenExpiresAt = this.getRefreshTokenExpiry(clientType);
 
@@ -66,13 +83,7 @@ export class SessionService {
 
     const savedSession = await sessionRepository.save(session);
 
-    const accessToken = fastify.jwt.sign({
-      id: user.id,
-      sessionId: savedSession.id,
-      clientType,
-      phoneNumber: user.phoneNumber,
-      username: user.username,
-    });
+    const accessToken = this.signAccessToken(user, savedSession.id, clientType, fastify);
 
     return {
       sessionId: savedSession.id,
@@ -126,13 +137,7 @@ export class SessionService {
 
     await sessionRepository.save(session);
 
-    const accessToken = fastify.jwt.sign({
-      id: user.id,
-      sessionId: session.id,
-      clientType: session.clientType,
-      phoneNumber: user.phoneNumber,
-      username: user.username,
-    });
+    const accessToken = this.signAccessToken(user, session.id, session.clientType, fastify);
 
     return {
       tokens: {

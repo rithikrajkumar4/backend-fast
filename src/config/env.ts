@@ -40,7 +40,13 @@ const envSchema = z.object({
   JWT_ACCESS_EXPIRY: z.string().default("15m"),
   REFRESH_TOKEN_WEB_EXPIRY_DAYS: z.coerce.number().default(7),
   REFRESH_TOKEN_APP_EXPIRY_DAYS: z.coerce.number().default(90),
-  DEFAULT_OTP: z.string().default("123456"),
+  DEFAULT_OTP: z.string().regex(/^[0-9]{4,8}$/, "DEFAULT_OTP must be 4-8 digits").default("123456"),
+  CONFIG_ENCRYPTION_KEY: z.string().optional(), // encrypts provider secrets saved from the admin panel (falls back to JWT_SECRET)
+  RATE_LIMIT_ENABLED: z.preprocess((val) => !(val === "false" || val === "0" || val === false), z.boolean()).default(true),
+
+  // Admin panel (served at /admin)
+  ADMIN_PANEL_ENABLED: z.preprocess((val) => !(val === "false" || val === "0" || val === false), z.boolean()).default(true),
+  ADMIN_JWT_EXPIRY: z.string().default("8h"),
 
   // Media storage (S3) & CDN (CloudFront)
   AWS_REGION: z.string().default("us-east-1"),

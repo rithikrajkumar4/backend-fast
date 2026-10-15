@@ -33,6 +33,14 @@ export class AppError extends Error {
     return new AppError(409, message, details);
   }
 
+  public static tooManyRequests(message = "Too Many Requests", details?: any): AppError {
+    return new AppError(429, message, details);
+  }
+
+  public static badGateway(message = "Bad Gateway", details?: any): AppError {
+    return new AppError(502, message, details);
+  }
+
   public static internal(message = "Internal Server Error", details?: any): AppError {
     return new AppError(500, message, details);
   }

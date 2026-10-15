@@ -2,7 +2,10 @@ import "reflect-metadata";
 import { DataSource, type DataSourceOptions } from "typeorm";
 import { env } from "../config/env.js";
 import { User } from "./entities/user.entity.js";
-import { Otp } from "./entities/otp.entity.js";
+import { VerificationCode } from "./entities/verification-code.entity.js";
+import { AuthIdentity } from "./entities/auth-identity.entity.js";
+import { AppSetting } from "./entities/app-setting.entity.js";
+import { AdminUser } from "./entities/admin-user.entity.js";
 import { UserSession } from "./entities/session.entity.js";
 import { ActivityLog } from "./entities/activity-log.entity.js";
 import { Album } from "./entities/album.entity.js";
@@ -15,7 +18,19 @@ const getDataSourceOptions = (): DataSourceOptions => {
     type: "postgres" as const,
     synchronize: env.DB_SYNC,
     logging: env.DB_LOG,
-    entities: [User, Otp, UserSession, ActivityLog, Album, Image, AlbumMember, ShareLink],
+    entities: [
+      User,
+      VerificationCode,
+      AuthIdentity,
+      UserSession,
+      ActivityLog,
+      Album,
+      Image,
+      AlbumMember,
+      ShareLink,
+      AppSetting,
+      AdminUser,
+    ],
     extra: {
       max: env.DB_MAX_CONNECTIONS,
     },

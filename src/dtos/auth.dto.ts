@@ -8,13 +8,28 @@ export type { AuthTokensDto, UserResponseDto };
 // ======================= Request DTOs =======================
 
 export interface SendOtpDto {
-  phoneNumber: string;
+  phoneNumber?: string;
+  email?: string;
+  channel?: "sms" | "whatsapp";
 }
 
 export interface VerifyOtpDto {
-  phoneNumber: string;
+  phoneNumber?: string;
+  email?: string;
   otp: string;
   clientType?: ClientType;
+}
+
+export interface SsoLoginDto {
+  idToken?: string;
+  accessToken?: string;
+  nonce?: string;
+  name?: string;
+  clientType?: ClientType;
+}
+
+export interface SsoProviderParamsDto {
+  provider: "google" | "apple" | "facebook";
 }
 
 export interface CompleteProfileDto {
@@ -37,18 +52,25 @@ export interface CheckUsernameDto {
 // ======================= Response DTOs =======================
 
 export interface SendOtpDataDto {
-  phoneNumber: string;
+  phoneNumber?: string;
+  email?: string;
+  channel: "sms" | "whatsapp" | "email";
   isNewUser: boolean;
-  otp: string;
   expiresAt: Date;
+  resendAvailableAt: Date;
+  /** Present only outside production */
+  otp?: string;
 }
 
 export type SendOtpResponseDto = ApiResponse<SendOtpDataDto>;
 
 export interface VerifyOtpNewUserDataDto {
-  phoneNumber: string;
+  phoneNumber?: string;
+  email?: string;
   suggestedUsername: string;
   tempToken: string;
+  /** Values the provider shared, to pre-fill the profile form after SSO */
+  prefill?: { name: string | null; email: string | null };
 }
 
 export interface VerifyOtpExistingUserDataDto {

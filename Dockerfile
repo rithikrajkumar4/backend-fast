@@ -42,6 +42,8 @@ ENV PORT=3000
 COPY package*.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
+# Admin panel static files (served at /admin)
+COPY public/ ./public/
 
 EXPOSE 3000
 USER node

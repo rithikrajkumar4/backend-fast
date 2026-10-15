@@ -55,8 +55,12 @@
           <p class="muted">What's enabled for the app right now, and recent sign-in activity.</p>
         </header>
         <div id="warnings" class="callouts"></div>
-        <h2 class="sub">Login methods</h2>
-        <div id="method-chips" class="chips"></div>
+        <div class="sub-row">
+          <h2 class="sub">Login method status</h2>
+          <button type="button" class="btn small" id="live-check-btn">Run live check</button>
+        </div>
+        <p class="muted small" id="status-meta">Checking…</p>
+        <div id="status-list" class="status-list"></div>
         <h2 class="sub">Users</h2>
         <div id="stats-users" class="stats"></div>
         <h2 class="sub">Codes sent in the last 24 hours</h2>
@@ -67,7 +71,7 @@
       <section class="panel" id="section-methods" data-section="methods">
         <header class="panel-head">
           <h1>Login methods</h1>
-          <p class="muted">The app reads these from <code>GET /api/v1/auth/config</code> to decide which options to show.</p>
+          <p class="muted">The app shows exactly the methods turned on here (it reads <code>GET /api/v1/auth/config</code>). Any setting can come from an environment variable instead: use the <span class="env-hint">Env</span> button next to it.</p>
         </header>
 
         <div class="card">
@@ -86,6 +90,7 @@
             </div>
             <label class="switch"><input type="checkbox" data-path="email.enabled" /><span></span></label>
           </div>
+          <div class="status-line" data-status="email"></div>
         </div>
 
         <div class="card">
@@ -96,6 +101,8 @@
             </div>
             <label class="switch"><input type="checkbox" data-path="phone.enabled" /><span></span></label>
           </div>
+          <div class="status-line" data-status="sms"></div>
+          <div class="status-line" data-status="whatsapp"></div>
           <div class="card-body" data-show-if="phone.enabled=true">
             <div class="check-row">
               <label class="check"><input type="checkbox" data-path="phone.sms" /> SMS</label>
@@ -172,6 +179,7 @@
             </div>
             <label class="switch"><input type="checkbox" data-path="sso.google.enabled" /><span></span></label>
           </div>
+          <div class="status-line" data-status="google"></div>
           <div class="card-body" data-show-if="sso.google.enabled=true">
             <label class="field">
               <span>OAuth client IDs</span>
@@ -189,6 +197,7 @@
             </div>
             <label class="switch"><input type="checkbox" data-path="sso.apple.enabled" /><span></span></label>
           </div>
+          <div class="status-line" data-status="apple"></div>
           <div class="card-body" data-show-if="sso.apple.enabled=true">
             <label class="field">
               <span>Bundle IDs / Services IDs</span>
@@ -206,6 +215,7 @@
             </div>
             <label class="switch"><input type="checkbox" data-path="sso.facebook.enabled" /><span></span></label>
           </div>
+          <div class="status-line" data-status="facebook"></div>
           <div class="card-body grid-2" data-show-if="sso.facebook.enabled=true">
             <label class="field">
               <span>App ID</span>
@@ -234,12 +244,13 @@
       <section class="panel" id="section-delivery" data-section="delivery">
         <header class="panel-head">
           <h1>Delivery providers</h1>
-          <p class="muted">Where codes are sent from. <strong>Console</strong> only writes codes to the server log, for development.</p>
+          <p class="muted">Where codes are sent from. <strong>Console</strong> only writes codes to the server log, for development. Keep credentials out of the database by reading them from environment variables with the <span class="env-hint">Env</span> button.</p>
         </header>
 
         <!-- Email -->
         <div class="card">
           <h3>Email</h3>
+          <div class="status-line" data-status="email"></div>
           <div class="grid-2">
             <label class="field">
               <span>Provider</span>
@@ -282,6 +293,7 @@
         <!-- SMS -->
         <div class="card">
           <h3>SMS</h3>
+          <div class="status-line" data-status="sms"></div>
           <label class="field">
             <span>Provider</span>
             <select data-path="delivery.sms.provider">
@@ -303,6 +315,7 @@
         <!-- WhatsApp -->
         <div class="card">
           <h3>WhatsApp</h3>
+          <div class="status-line" data-status="whatsapp"></div>
           <label class="field">
             <span>Provider</span>
             <select data-path="delivery.whatsapp.provider">

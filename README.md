@@ -131,6 +131,10 @@ Users sign in with a **phone number** (code by SMS or WhatsApp), an **email** (c
 
 From the panel you can turn each login method on or off, and set the OTP policy (length, expiry, attempts, resend cooldown, hourly cap). You also enter the SSO client IDs and the delivery provider credentials there, add fixed-code **test accounts** for App Store / Play Store review, and send test messages. Provider secrets are encrypted in the database (`CONFIG_ENCRYPTION_KEY`) and are never returned by the API. Set `ADMIN_PANEL_ENABLED=false` to turn the panel and its API off.
 
+**Environment variables.** Every setting has an **Env** button that reads it from a server environment variable instead of a saved value, e.g. `AUTH_DELIVERY_TWILIO_AUTH_TOKEN=…`. Secrets read this way never reach the database. Names must start with `AUTH_`, so the panel can't expose unrelated server secrets such as `JWT_SECRET`. Booleans accept `true/false/1/0`; lists such as client IDs are comma-separated. If a variable is missing or invalid, the saved value is used and the status check says why. Environment changes are picked up within 15 seconds; a restart is only needed to change the process environment itself.
+
+**Status.** The Overview shows whether each login method works, and if not, why: a missing field, a missing env variable, a Console-only provider, or credentials the provider rejects. **Run live check** contacts SMTP, Twilio, the WhatsApp Cloud API, Facebook and Google/Apple's key servers (`GET /api/admin/settings/auth/status?live=true`). Google and Apple don't let servers validate client IDs, so test a real sign-in for those.
+
 | Channel | Providers |
 |---|---|
 | Email | Console (log only), SMTP (works with SES, SendGrid, Postmark, Gmail…) |
@@ -159,7 +163,8 @@ Outside production every code is `DEFAULT_OTP` and is returned as `data.otp`. In
 | `POST` | `/api/v1/auth/complete-profile` | |
 | `POST` | `/api/v1/auth/refresh-token`, `/logout` · `GET` `/me`, `/activity` | logout revokes the access token immediately |
 | `POST` | `/api/admin/auth/login` | admin token (separate from user tokens) |
-| `GET` / `PUT` | `/api/admin/settings/auth` | secrets: `""` keeps, `null` clears |
+| `GET` / `PUT` | `/api/admin/settings/auth` | secrets: `""` keeps, `null` clears; `envRefs: { "<setting path>": "AUTH_…" }` |
+| `GET` | `/api/admin/settings/auth/status` | per-method health; `?live=true` contacts providers |
 | `POST` | `/api/admin/settings/auth/test-delivery` | `{ channel, to }` |
 | `GET` | `/api/admin/overview` | user and delivery counts |
 

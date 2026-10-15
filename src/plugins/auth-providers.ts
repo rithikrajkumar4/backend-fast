@@ -7,17 +7,21 @@ declare module "fastify" {
   interface FastifyInstance {
     otpSender: OtpSender;
     identityVerifier: IdentityVerifier;
+    /** fetch used by the admin status check to contact providers (replaced in tests) */
+    probeFetch: typeof fetch;
   }
 }
 
 export interface AuthProvidersOptions {
   otpSender?: OtpSender;
   identityVerifier?: IdentityVerifier;
+  probeFetch?: typeof fetch;
 }
 
 async function authProvidersPluginAsync(fastify: FastifyInstance, opts: AuthProvidersOptions) {
   fastify.decorate("otpSender", opts.otpSender ?? createOtpSender(fastify.log));
   fastify.decorate("identityVerifier", opts.identityVerifier ?? new IdentityVerifier());
+  fastify.decorate("probeFetch", opts.probeFetch ?? fetch);
 }
 
 export const authProvidersPlugin = fp(authProvidersPluginAsync, {

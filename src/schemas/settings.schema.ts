@@ -212,3 +212,44 @@ export function validateAuthSettings(s: AuthSettings): string[] {
 
   return errors;
 }
+
+// ======================= Environment variable sources =======================
+
+/**
+ * Any setting can come from an environment variable instead of a value saved in the panel.
+ * Names must start with AUTH_ so the panel can't be used to read unrelated server secrets
+ * (JWT_SECRET, DATABASE_URL...) into a field that's shown to the app.
+ */
+export const ENV_NAME_PATTERN = /^AUTH_[A-Z0-9_]{1,100}$/;
+
+export const AUTH_SETTINGS_DEFAULTS: AuthSettings = authSettingsSchema.parse({});
+
+function leafPaths(obj: Record<string, unknown>, prefix = ""): string[] {
+  return Object.entries(obj).flatMap(([key, value]) => {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return leafPaths(value as Record<string, unknown>, path);
+    }
+    return [path];
+  });
+}
+
+/** Every setting that can be sourced from an env variable (everything except test accounts). */
+export const ENV_PATHS: string[] = leafPaths(AUTH_SETTINGS_DEFAULTS).filter((p) => p !== "testAccounts");
+
+/** e.g. "delivery.twilio.authToken" -> "AUTH_DELIVERY_TWILIO_AUTH_TOKEN" */
+export function suggestEnvName(path: string): string {
+  return `AUTH_${path.replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/\./g, "_").toUpperCase()}`;
+}
+
+export const envRefsSchema = z
+  .record(
+    z.string().refine((p) => ENV_PATHS.includes(p), { message: "Unknown setting" }),
+    z
+      .string()
+      .trim()
+      .regex(ENV_NAME_PATTERN, "Environment variable names must start with AUTH_ and use A-Z, 0-9 and _")
+  )
+  .default({});
+
+export type EnvRefs = Record<string, string>;

@@ -1,6 +1,7 @@
 import type { FastifyRequest, FastifyReply } from "fastify";
 import { AdminService } from "../services/admin.service.js";
 import { SettingsService } from "../services/settings.service.js";
+import { AuthStatusService } from "../services/auth-status.service.js";
 import type {
   AdminLoginInput,
   AdminChangePasswordInput,
@@ -42,6 +43,21 @@ export class AdminController {
     const data = await SettingsService.updateAuthSettings(request.body, request.admin!.id, request.server);
     request.log.info({ adminId: request.admin!.id }, "Auth settings updated");
     return { success: true, message: "Settings saved", data };
+  }
+
+  /** Whether each login method works; `?live=true` also contacts the providers. */
+  public static async getAuthStatus(
+    request: FastifyRequest<{ Querystring: { live?: string } }>,
+    _reply: FastifyReply
+  ) {
+    const live = request.query.live === "true" || request.query.live === "1";
+    if (live) SettingsService.invalidateCache(); // pick up env changes right away
+    const loaded = await SettingsService.load(request.server);
+    const methods = await AuthStatusService.check(loaded, { live, fetch: request.server.probeFetch });
+    return {
+      success: true,
+      data: { methods, warnings: SettingsService.getWarnings(loaded), checkedAt: new Date(), live },
+    };
   }
 
   public static async testDelivery(

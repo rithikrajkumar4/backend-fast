@@ -10,6 +10,12 @@
   let secretsSet = {};
   /** Secret edits: path -> new value, or null to clear. */
   let secretEdits = {};
+  /** Env variable sources as saved: path -> variable name, and how each resolved on the server. */
+  let savedEnvRefs = {};
+  let envState = {};
+  let envSuggestions = {};
+  let envControlsReady = false;
+  let lastStatus = null;
 
   // ======================= Storage & API =======================
 
@@ -95,6 +101,7 @@
       el.value = "";
     }
     secretEdits = {};
+    for (const path of Object.keys(envSuggestions)) setEnvMode(path, savedEnvRefs[path]);
     renderSecretStates();
     renderTestAccounts(settings.testAccounts || []);
     updateConditionals();
@@ -119,12 +126,146 @@
     // Secrets: blank keeps the saved value server-side, null clears it
     for (const el of $$("[data-secret]")) setPath(settings, el.dataset.secret, "");
     for (const [path, value] of Object.entries(secretEdits)) setPath(settings, path, value);
+    settings.envRefs = readEnvRefs();
     return settings;
+  }
+
+  function sortedRefs(refs) {
+    return Object.fromEntries(Object.entries(refs).sort(([a], [b]) => a.localeCompare(b)));
   }
 
   function isDirty() {
     if (!saved) return false;
-    return JSON.stringify(readForm()) !== JSON.stringify(saved);
+    const current = readForm();
+    current.envRefs = sortedRefs(current.envRefs);
+    return JSON.stringify(current) !== JSON.stringify({ ...saved, envRefs: sortedRefs(savedEnvRefs) });
+  }
+
+  // ======================= Env variable sources =======================
+
+  const envControls = new Map(); // path -> { toggle, row, input, badge, controls[] }
+
+  /** Adds an "Env" toggle next to every setting the server says can come from an env variable. */
+  function setupEnvControls() {
+    if (envControlsReady) return;
+    envControlsReady = true;
+    for (const path of Object.keys(envSuggestions)) {
+      const controls = $$(`[data-path="${path}"], [data-secret="${path}"]`);
+      if (controls.length === 0) continue;
+      const control = controls[0];
+
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "env-toggle";
+      toggle.textContent = "Env";
+      toggle.setAttribute("aria-pressed", "false");
+      toggle.title = "Read this setting from a server environment variable";
+      const fieldName = (control.closest(".field")?.querySelector("span")?.firstChild?.textContent ||
+        control.closest(".card-row")?.querySelector("h3")?.textContent ||
+        control.closest(".check")?.textContent || path).trim();
+      toggle.setAttribute("aria-label", `Read ${fieldName} from an environment variable`);
+
+      const row = document.createElement("div");
+      row.className = "env-row";
+      row.hidden = true;
+      const prefix = document.createElement("span");
+      prefix.className = "env-prefix";
+      prefix.textContent = "$";
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "env-name";
+      input.spellcheck = false;
+      input.autocomplete = "off";
+      input.setAttribute("aria-label", `Environment variable for ${path}`);
+      const badge = document.createElement("span");
+      badge.className = "env-badge";
+      badge.setAttribute("aria-live", "polite");
+      row.append(prefix, input, badge);
+
+      const field = control.closest(".field");
+      const sw = control.closest(".switch");
+      const check = control.closest(".check");
+      if (field) {
+        $("span", field).appendChild(toggle);
+        field.appendChild(row);
+      } else if (sw) {
+        const wrap = document.createElement("div");
+        wrap.className = "switch-wrap";
+        sw.replaceWith(wrap);
+        wrap.append(toggle, sw);
+        row.classList.add("block");
+        wrap.closest(".card-row").after(row);
+      } else if (check) {
+        const wrap = document.createElement("span");
+        wrap.className = "check-wrap";
+        check.replaceWith(wrap);
+        wrap.append(check, toggle, row);
+      } else {
+        continue;
+      }
+
+      toggle.addEventListener("click", () => {
+        const on = toggle.getAttribute("aria-pressed") !== "true";
+        setEnvMode(path, on ? savedEnvRefs[path] || envSuggestions[path] : undefined);
+        if (on) {
+          input.focus();
+          input.select(); // typing replaces the suggested name
+        }
+        updateConditionals();
+        updateSavebar();
+      });
+      input.addEventListener("input", () => {
+        input.value = input.value.toUpperCase().replace(/[^A-Z0-9_]/g, "_");
+        renderEnvBadge(path);
+      });
+      envControls.set(path, { toggle, row, input, badge, controls });
+    }
+  }
+
+  /** name: env variable to read, or undefined for a value saved in the panel. */
+  function setEnvMode(path, name) {
+    const c = envControls.get(path);
+    if (!c) return;
+    const on = name !== undefined;
+    c.toggle.setAttribute("aria-pressed", String(on));
+    c.row.hidden = !on;
+    c.input.value = on ? name : "";
+    for (const el of c.controls) {
+      el.disabled = on;
+      (el.closest(".switch") || el).classList.toggle("is-env-sourced", on);
+    }
+    renderEnvBadge(path);
+  }
+
+  function readEnvRefs() {
+    const refs = {};
+    for (const [path, c] of envControls) {
+      if (c.toggle.getAttribute("aria-pressed") === "true") refs[path] = c.input.value.trim();
+    }
+    return refs;
+  }
+
+  function renderEnvBadge(path) {
+    const c = envControls.get(path);
+    if (!c || c.row.hidden) return;
+    const name = c.input.value.trim();
+    const state = envState[path];
+    c.badge.className = "env-badge";
+    if (!/^AUTH_[A-Z0-9_]{1,100}$/.test(name)) {
+      c.badge.textContent = "Must start with AUTH_";
+      c.badge.classList.add("invalid");
+    } else if (savedEnvRefs[path] !== name || !state) {
+      c.badge.textContent = "Save to check it on the server";
+    } else if (!state.isSet) {
+      c.badge.textContent = "✕ Not set on the server: the saved value below is used";
+      c.badge.classList.add("missing");
+    } else if (state.invalid) {
+      c.badge.textContent = `✕ Invalid value (${state.invalid}): the saved value is used`;
+      c.badge.classList.add("invalid");
+    } else {
+      c.badge.textContent = "✓ Set on the server, in use";
+      c.badge.classList.add("set");
+    }
   }
 
   function updateSavebar() {
@@ -206,25 +347,6 @@
     return div;
   }
 
-  function renderMethodChips(s) {
-    const chips = [
-      ["Email", s.email.enabled],
-      ["SMS", s.phone.enabled && s.phone.sms],
-      ["WhatsApp", s.phone.enabled && s.phone.whatsapp],
-      ["Google", s.sso.google.enabled],
-      ["Apple", s.sso.apple.enabled],
-      ["Facebook", s.sso.facebook.enabled],
-    ];
-    const root = $("#method-chips");
-    root.textContent = "";
-    for (const [label, on] of chips) {
-      const chip = document.createElement("span");
-      chip.className = `chip ${on ? "on" : "off"}`;
-      chip.textContent = `${label} ${on ? "on" : "off"}`;
-      root.appendChild(chip);
-    }
-  }
-
   function renderWarnings(warnings) {
     const root = $("#warnings");
     root.textContent = "";
@@ -265,10 +387,96 @@
   function applyServerView(view) {
     saved = view.settings;
     secretsSet = view.secrets || {};
+    savedEnvRefs = view.envRefs || {};
+    envState = view.envState || {};
+    envSuggestions = view.envSuggestions || {};
+    setupEnvControls();
     fillForm(saved);
-    renderMethodChips(saved);
     renderWarnings(view.warnings);
     updateSavebar();
+  }
+
+  // ======================= Status =======================
+
+  const LEVEL_TEXT = { ok: "Working", warning: "Working, with warnings", error: "Not working", off: "Off" };
+
+  function problemList(problems) {
+    const ul = document.createElement("ul");
+    for (const p of problems) {
+      const li = document.createElement("li");
+      li.className = p.level;
+      li.textContent = p.message;
+      ul.appendChild(li);
+    }
+    return ul;
+  }
+
+  function renderStatus(data) {
+    lastStatus = data;
+    const list = $("#status-list");
+    list.textContent = "";
+    for (const m of data.methods) {
+      const item = document.createElement("div");
+      item.className = "status-item";
+      const head = document.createElement("div");
+      head.className = "status-head";
+      const dot = document.createElement("span");
+      dot.className = `dot ${m.level}`;
+      const name = document.createElement("b");
+      name.textContent = m.label;
+      const state = document.createElement("span");
+      state.textContent = LEVEL_TEXT[m.level];
+      head.append(dot, name, state);
+      const summary = document.createElement("div");
+      summary.className = "status-summary";
+      summary.textContent = m.summary;
+      item.append(head, summary);
+      const extra = m.problems.filter((p) => !m.summary.includes(p.message));
+      if (extra.length) item.appendChild(problemList(extra));
+      list.appendChild(item);
+    }
+    const when = new Date(data.checkedAt).toLocaleTimeString();
+    $("#status-meta").textContent = data.live
+      ? `Live check at ${when}: providers were contacted to test the credentials.`
+      : `Configuration check at ${when}. Run a live check to test credentials with each provider.`;
+    renderWarnings(data.warnings);
+
+    // The same status on each method's own card
+    for (const line of $$("[data-status]")) {
+      const m = data.methods.find((x) => x.key === line.dataset.status);
+      line.className = "status-line";
+      line.textContent = "";
+      if (!m || m.level === "off" && m.problems.length === 0) continue;
+      line.classList.add("shown", m.level === "off" ? "warning" : m.level);
+      const dot = document.createElement("span");
+      dot.className = `dot ${m.level}`;
+      const text = document.createElement("span");
+      text.textContent = `${m.label}: ${m.summary}`;
+      line.append(dot, text);
+      const rest = m.problems.filter((p) => !m.summary.includes(p.message));
+      if (rest.length) line.appendChild(problemList(rest));
+    }
+  }
+
+  let statusRequest = 0;
+  async function loadStatus(live = false) {
+    const id = ++statusRequest;
+    const btn = $("#live-check-btn");
+    if (live) {
+      btn.disabled = true;
+      btn.textContent = "Checking…";
+    }
+    try {
+      const { data } = await api("GET", `/api/admin/settings/auth/status${live ? "?live=true" : ""}`);
+      if (id === statusRequest) renderStatus(data);
+    } catch (err) {
+      if (err.message !== "Unauthorized") toast(err.message, "error");
+    } finally {
+      if (live) {
+        btn.disabled = false;
+        btn.textContent = "Run live check";
+      }
+    }
   }
 
   async function loadSettings() {
@@ -285,6 +493,7 @@
       applyServerView(data);
       toast("Settings saved");
       loadOverview();
+      loadStatus(true);
     } catch (err) {
       if (err.message !== "Unauthorized") toast(err.message, "error", err.details);
     } finally {
@@ -347,6 +556,7 @@
       const { data } = await api("GET", "/api/admin/auth/me");
       $("#admin-email").textContent = data.admin.username;
       await loadSettings();
+      loadStatus(true);
     } catch (err) {
       if (err.message !== "Unauthorized") showLogin(err.message);
       return;
@@ -420,6 +630,7 @@
     updateSavebar();
   });
   $("#save-btn").addEventListener("click", save);
+  $("#live-check-btn").addEventListener("click", () => loadStatus(true));
   $("#discard-btn").addEventListener("click", () => {
     fillForm(saved);
     updateSavebar();

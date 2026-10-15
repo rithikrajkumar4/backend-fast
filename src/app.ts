@@ -22,6 +22,7 @@ export interface AppDependencies {
   storage?: StorageService;
   otpSender?: OtpSender;
   identityVerifier?: IdentityVerifier;
+  probeFetch?: typeof fetch;
 }
 
 export async function buildApp(
@@ -65,6 +66,7 @@ export async function buildApp(
   await app.register(authProvidersPlugin, {
     otpSender: deps.otpSender,
     identityVerifier: deps.identityVerifier,
+    probeFetch: deps.probeFetch,
   });
   await app.register(activityTrackerPlugin);
   await app.register(storagePlugin, { storage: deps.storage });

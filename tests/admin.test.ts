@@ -8,6 +8,14 @@ import { AppSetting } from "../src/database/entities/app-setting.entity.js";
 
 let app: FastifyInstance;
 let failDelivery = false;
+/** Responses for live status checks, keyed by URL host+path */
+const probeResponses = new Map<string, { status: number; body: unknown }>();
+const probeFetch = (async (input: string | URL) => {
+  const url = new URL(String(input));
+  const hit = probeResponses.get(url.host + url.pathname);
+  if (!hit) return new Response("{}", { status: 200 });
+  return new Response(JSON.stringify(hit.body), { status: hit.status });
+}) as typeof fetch;
 const PASSWORD = "correct-horse-battery";
 
 before(async () => {
@@ -16,6 +24,7 @@ before(async () => {
       if (failDelivery) throw new Error("Authenticate: invalid Twilio credentials");
       sentMessages.push(message);
     },
+    probeFetch,
   });
 });
 
@@ -255,5 +264,146 @@ describe("Admin tools", () => {
     assert.match(page.body, /admin\.js/);
     const script = await app.inject({ method: "GET", url: "/admin/admin.js" });
     assert.equal(script.statusCode, 200);
+  });
+});
+
+describe("Settings from environment variables", () => {
+  const view = (token: string) => getSettings(token).then((r) => r.json().data);
+
+  it("reads a setting from an AUTH_ env variable and reports it as set", async () => {
+    const { token } = await createAdmin();
+    process.env.AUTH_TEST_APP_NAME = "Name From Env";
+    const { settings } = await view(token);
+    const res = await putSettings(token, { ...settings, envRefs: { appName: "AUTH_TEST_APP_NAME" } });
+    assert.equal(res.statusCode, 200, res.body);
+    const data = res.json().data;
+    assert.equal(data.settings.appName, "TestApp", "saved fallback stays as typed");
+    assert.deepEqual(data.envState.appName, { name: "AUTH_TEST_APP_NAME", isSet: true });
+    assert.equal(data.envSuggestions["delivery.twilio.authToken"], "AUTH_DELIVERY_TWILIO_AUTH_TOKEN");
+    const config = (await app.inject({ method: "GET", url: "/api/v1/auth/config" })).json().data;
+    assert.equal(config.appName, "Name From Env");
+    delete process.env.AUTH_TEST_APP_NAME;
+    await setAuthSettings(app);
+  });
+
+  it("only allows AUTH_ variables, so server secrets can't be exposed", async () => {
+    const { token } = await createAdmin();
+    const { settings } = await view(token);
+    const res = await putSettings(token, { ...settings, envRefs: { appName: "JWT_SECRET" } });
+    assert.equal(res.statusCode, 400);
+    const unknownPath = await putSettings(token, { ...settings, envRefs: { "not.a.setting": "AUTH_X" } });
+    assert.equal(unknownPath.statusCode, 400);
+  });
+
+  it("never copies an env secret into the database", async () => {
+    const { token } = await createAdmin();
+    process.env.AUTH_TEST_TWILIO_TOKEN = "env-only-twilio-token";
+    const { settings } = await view(token);
+    settings.delivery.sms.provider = "twilio";
+    settings.delivery.twilio.accountSid = "AC" + "0".repeat(32);
+    settings.delivery.twilio.smsFrom = "+15005550006";
+    let res = await putSettings(token, { ...settings, envRefs: { "delivery.twilio.authToken": "AUTH_TEST_TWILIO_TOKEN" } });
+    assert.equal(res.statusCode, 200, res.body);
+    const row = await app.db.getRepository(AppSetting).findOneByOrFail({ key: "auth" });
+    assert.ok(!JSON.stringify(row.value).includes("env-only-twilio-token"));
+
+    // Switching back to a saved value: nothing was saved, so Twilio is now missing its token
+    res = await putSettings(token, { ...settings, envRefs: {} });
+    assert.equal(res.statusCode, 400);
+    assert.match(res.json().message, /Auth Token/);
+    delete process.env.AUTH_TEST_TWILIO_TOKEN;
+    await setAuthSettings(app);
+  });
+
+  it("allows saving with a variable that isn't set yet, and status explains it", async () => {
+    const { token } = await createAdmin();
+    const { settings } = await view(token);
+    settings.sso.facebook.appId = "";
+    const res = await putSettings(token, { ...settings, envRefs: { "sso.facebook.appId": "AUTH_MISSING_FB_APP_ID" } });
+    assert.equal(res.statusCode, 200, res.body);
+    assert.equal(res.json().data.envState["sso.facebook.appId"].isSet, false);
+    const status = await app.inject({ method: "GET", url: "/api/admin/settings/auth/status", headers: bearer(token) });
+    const facebook = status.json().data.methods.find((m: { key: string }) => m.key === "facebook");
+    assert.equal(facebook.level, "error");
+    assert.match(facebook.summary, /AUTH_MISSING_FB_APP_ID/);
+    await setAuthSettings(app);
+  });
+
+  it("ignores an env value the setting doesn't accept", async () => {
+    const { token } = await createAdmin();
+    process.env.AUTH_TEST_OTP_LENGTH = "20";
+    const { settings } = await view(token);
+    const res = await putSettings(token, { ...settings, envRefs: { "otp.length": "AUTH_TEST_OTP_LENGTH" } });
+    assert.equal(res.statusCode, 200, res.body);
+    assert.ok(res.json().data.envState["otp.length"].invalid);
+    const config = (await app.inject({ method: "GET", url: "/api/v1/auth/config" })).json().data;
+    assert.equal(config.otp.length, 6);
+    delete process.env.AUTH_TEST_OTP_LENGTH;
+    await setAuthSettings(app);
+  });
+});
+
+describe("Login method status", () => {
+  const status = async (token: string, live = false) =>
+    (await app.inject({ method: "GET", url: `/api/admin/settings/auth/status${live ? "?live=true" : ""}`, headers: bearer(token) })).json()
+      .data.methods as Array<{ key: string; level: string; summary: string; problems: Array<{ message: string }> }>;
+
+  it("requires an admin", async () => {
+    const res = await app.inject({ method: "GET", url: "/api/admin/settings/auth/status" });
+    assert.equal(res.statusCode, 401);
+  });
+
+  it("explains console delivery, off methods and suspicious IDs", async () => {
+    const { token } = await createAdmin();
+    await setAuthSettings(app, { phone: { whatsapp: false } });
+    const methods = await status(token);
+    const byKey = Object.fromEntries(methods.map((m) => [m.key, m]));
+    assert.equal(byKey.email.level, "warning");
+    assert.match(byKey.email.summary, /Console provider/);
+    assert.equal(byKey.whatsapp.level, "off");
+    assert.equal(byKey.google.level, "ok");
+    assert.equal(byKey.apple.level, "ok");
+    await setAuthSettings(app);
+  });
+
+  it("reports missing provider fields as not working", async () => {
+    const { token } = await createAdmin();
+    await setAuthSettings(app, { sso: { google: { clientIds: ["not-a-google-id"] } } });
+    const google = (await status(token)).find((m) => m.key === "google")!;
+    assert.equal(google.level, "warning");
+    assert.match(google.problems[0].message, /doesn't look like a Google OAuth client ID/);
+    await setAuthSettings(app);
+  });
+
+  it("live check reports credentials the provider rejects", async () => {
+    const { token } = await createAdmin();
+    probeResponses.set("graph.facebook.com/oauth/access_token", {
+      status: 400,
+      body: { error: { message: "Error validating client secret." } },
+    });
+    const facebook = (await status(token, true)).find((m) => m.key === "facebook")!;
+    assert.equal(facebook.level, "error");
+    assert.match(facebook.summary, /Facebook rejected the App ID \/ App Secret: Error validating client secret/);
+
+    probeResponses.set("graph.facebook.com/oauth/access_token", { status: 200, body: { access_token: "x" } });
+    const ok = (await status(token, true)).find((m) => m.key === "facebook")!;
+    assert.equal(ok.level, "ok");
+    probeResponses.clear();
+  });
+
+  it("live check catches bad Twilio credentials", async () => {
+    const { token } = await createAdmin();
+    await setAuthSettings(app, {
+      delivery: {
+        sms: { provider: "twilio" },
+        twilio: { accountSid: "AC" + "1".repeat(32), authToken: "wrong", smsFrom: "+15005550006" },
+      },
+    });
+    probeResponses.set(`api.twilio.com/2010-04-01/Accounts/AC${"1".repeat(32)}.json`, { status: 401, body: { message: "Authenticate" } });
+    const sms = (await status(token, true)).find((m) => m.key === "sms")!;
+    assert.equal(sms.level, "error");
+    assert.match(sms.summary, /Twilio rejected the Account SID/);
+    probeResponses.clear();
+    await setAuthSettings(app);
   });
 });

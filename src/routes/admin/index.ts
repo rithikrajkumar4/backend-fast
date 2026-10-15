@@ -32,6 +32,11 @@ export const adminRoutes: FastifyPluginAsync = async (fastify) => {
     // Auth configuration (login methods, OTP policy, SSO, delivery providers)
     secured.get("/settings/auth", asyncHandler(AdminController.getAuthSettings));
     secured.put("/settings/auth", asyncHandler(AdminController.updateAuthSettings));
+    secured.get(
+      "/settings/auth/status",
+      { config: perMinute(30) },
+      asyncHandler(AdminController.getAuthStatus)
+    );
     secured.post(
       "/settings/auth/test-delivery",
       { preValidation: [validateBody(adminTestDeliverySchema)], config: perMinute(10) },

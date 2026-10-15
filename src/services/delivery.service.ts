@@ -74,6 +74,23 @@ async function sendSmtpEmail(message: OtpMessage): Promise<void> {
   });
 }
 
+/** Connects and logs in to the SMTP server without sending anything. Used by the status check. */
+export async function verifySmtpConnection(smtp: AuthSettings["delivery"]["email"]["smtp"]): Promise<void> {
+  const transporter = nodemailer.createTransport({
+    host: smtp.host,
+    port: smtp.port,
+    secure: smtp.secure,
+    auth: smtp.user ? { user: smtp.user, pass: smtp.password } : undefined,
+    connectionTimeout: HTTP_TIMEOUT_MS,
+    greetingTimeout: HTTP_TIMEOUT_MS,
+  });
+  try {
+    await transporter.verify();
+  } finally {
+    transporter.close();
+  }
+}
+
 function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }

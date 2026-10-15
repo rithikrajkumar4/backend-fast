@@ -15,8 +15,8 @@
       <h1>Sign in</h1>
       <p class="muted">Manage how users sign in to the app.</p>
       <label class="field">
-        <span>Email</span>
-        <input type="email" name="email" autocomplete="username" required />
+        <span>Username</span>
+        <input type="text" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required />
       </label>
       <label class="field">
         <span>Password</span>
@@ -24,7 +24,7 @@
       </label>
       <p class="form-error" id="login-error" role="alert" hidden></p>
       <button type="submit" class="btn primary block">Sign in</button>
-      <p class="hint">No admin yet? Run <code>npm run admin:create -- --email … --password …</code> on the server.</p>
+      <p class="hint">No admin yet? Run <code>npm run admin:create -- --username … --password …</code> on the server.</p>
     </form>
   </main>
 

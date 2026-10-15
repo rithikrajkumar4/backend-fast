@@ -12,28 +12,28 @@ import { normalizeEmail, normalizePhone } from "../utils/identifiers.js";
 import { AppError } from "../utils/errors.js";
 import { env } from "../config/env.js";
 
-// Compared against when the email is unknown, so response time doesn't reveal which admins exist
+// Compared against when the username is unknown, so response time doesn't reveal which admins exist
 const DUMMY_HASH_PROMISE = hashPassword("dummy-password-for-timing");
 
 export class AdminService {
   public static async login(
-    email: string,
+    username: string,
     password: string,
     fastify: FastifyInstance
   ): Promise<{ admin: AdminUser; token: string; expiresIn: string }> {
     const repo = fastify.db.getRepository(AdminUser);
     const admin = await repo.findOne({
-      where: { email: normalizeEmail(email) },
-      select: { id: true, email: true, name: true, isActive: true, passwordHash: true, lastLoginAt: true, createdAt: true, updatedAt: true },
+      where: { username: username.trim().toLowerCase() },
+      select: { id: true, username: true, name: true, isActive: true, passwordHash: true, lastLoginAt: true, createdAt: true, updatedAt: true },
     });
 
     const valid = await verifyPassword(password, admin?.passwordHash ?? (await DUMMY_HASH_PROMISE));
     if (!admin || !valid || !admin.isActive) {
-      throw AppError.unauthorized("Invalid email or password");
+      throw AppError.unauthorized("Invalid username or password");
     }
 
     await repo.update(admin.id, { lastLoginAt: new Date() });
-    const payload: AdminJwtPayload = { kind: "admin", adminId: admin.id, email: admin.email };
+    const payload: AdminJwtPayload = { kind: "admin", adminId: admin.id, username: admin.username };
     const token = fastify.jwt.sign(payload, { expiresIn: env.ADMIN_JWT_EXPIRY });
     const { passwordHash: _omit, ...safe } = admin;
     return { admin: safe as AdminUser, token, expiresIn: env.ADMIN_JWT_EXPIRY };
@@ -56,19 +56,19 @@ export class AdminService {
   /** Creates an admin, or resets the password of an existing one. Used by `npm run admin:create`. */
   public static async upsertAdmin(
     db: DataSource,
-    email: string,
+    username: string,
     password: string,
     name = ""
   ): Promise<{ admin: AdminUser; created: boolean }> {
     const repo = db.getRepository(AdminUser);
-    const normalized = normalizeEmail(email);
+    const normalized = username.trim().toLowerCase();
     const passwordHash = await hashPassword(password);
-    const existing = await repo.findOneBy({ email: normalized });
+    const existing = await repo.findOneBy({ username: normalized });
     if (existing) {
       await repo.update(existing.id, { passwordHash, isActive: true, ...(name ? { name } : {}) });
       return { admin: existing, created: false };
     }
-    const admin = await repo.save(repo.create({ email: normalized, passwordHash, name, isActive: true }));
+    const admin = await repo.save(repo.create({ username: normalized, passwordHash, name, isActive: true }));
     return { admin, created: true };
   }
 

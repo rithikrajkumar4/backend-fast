@@ -339,13 +339,13 @@
     const err = $("#login-error");
     err.hidden = !message;
     err.textContent = message || "";
-    $("#login-form [name=email]").focus();
+    $("#login-form [name=username]").focus();
   }
 
   async function showApp() {
     try {
       const { data } = await api("GET", "/api/admin/auth/me");
-      $("#admin-email").textContent = data.admin.email;
+      $("#admin-email").textContent = data.admin.username;
       await loadSettings();
     } catch (err) {
       if (err.message !== "Unauthorized") showLogin(err.message);
@@ -366,7 +366,7 @@
     $("#login-error").hidden = true;
     try {
       const { data } = await api("POST", "/api/admin/auth/login", {
-        email: form.email.value,
+        username: form.username.value,
         password: form.password.value,
       });
       setToken(data.token);

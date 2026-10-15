@@ -26,7 +26,7 @@ export interface TempRegistrationPayload {
 export interface AdminJwtPayload {
   kind: "admin";
   adminId: string;
-  email: string;
+  username: string;
 }
 
 declare module "@fastify/jwt" {

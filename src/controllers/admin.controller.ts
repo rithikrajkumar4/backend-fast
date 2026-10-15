@@ -9,8 +9,8 @@ import type {
 
 export class AdminController {
   public static async login(request: FastifyRequest<{ Body: AdminLoginInput }>, _reply: FastifyReply) {
-    const { email, password } = request.body;
-    const result = await AdminService.login(email, password, request.server);
+    const { username, password } = request.body;
+    const result = await AdminService.login(username, password, request.server);
     return { success: true, data: result };
   }
 

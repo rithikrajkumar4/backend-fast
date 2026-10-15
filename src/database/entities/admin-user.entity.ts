@@ -11,8 +11,9 @@ export class AdminUser {
   @PrimaryGeneratedColumn("uuid")
   id!: string;
 
+  // Login name, stored lowercased. Any handle works, including an email address.
   @Column({ type: "varchar", length: 255, unique: true })
-  email!: string;
+  username!: string;
 
   @Column({ type: "varchar", length: 255, select: false })
   passwordHash!: string;

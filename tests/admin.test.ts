@@ -25,11 +25,11 @@ after(async () => {
 });
 
 async function createAdmin() {
-  const email = `${uniqueHandle("admin")}@example.com`;
-  await AdminService.upsertAdmin(app.db, email, PASSWORD, "Test Admin");
-  const res = await app.inject({ method: "POST", url: "/api/admin/auth/login", payload: { email, password: PASSWORD } });
+  const username = uniqueHandle("admin");
+  await AdminService.upsertAdmin(app.db, username, PASSWORD, "Test Admin");
+  const res = await app.inject({ method: "POST", url: "/api/admin/auth/login", payload: { username, password: PASSWORD } });
   assert.equal(res.statusCode, 200, res.body);
-  return { email, token: res.json().data.token as string };
+  return { username, token: res.json().data.token as string };
 }
 
 const getSettings = (token: string) =>
@@ -38,25 +38,36 @@ const putSettings = (token: string, payload: unknown) =>
   app.inject({ method: "PUT", url: "/api/admin/settings/auth", headers: bearer(token), payload: payload as object });
 
 describe("Admin login", () => {
-  it("rejects a wrong password and an unknown email the same way", async () => {
-    const { email } = await createAdmin();
-    const wrong = await app.inject({ method: "POST", url: "/api/admin/auth/login", payload: { email, password: "nope-nope-nope" } });
+  it("rejects a wrong password and an unknown username the same way", async () => {
+    const { username } = await createAdmin();
+    const wrong = await app.inject({ method: "POST", url: "/api/admin/auth/login", payload: { username, password: "nope-nope-nope" } });
     const unknown = await app.inject({
       method: "POST",
       url: "/api/admin/auth/login",
-      payload: { email: "nobody@example.com", password: PASSWORD },
+      payload: { username: "nobody", password: PASSWORD },
     });
     assert.equal(wrong.statusCode, 401);
     assert.equal(unknown.statusCode, 401);
     assert.equal(wrong.json().message, unknown.json().message);
   });
 
+  it("accepts a plain username like zeus, case-insensitively", async () => {
+    const username = `zeus_${uniqueHandle()}`;
+    await AdminService.upsertAdmin(app.db, username, PASSWORD);
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/admin/auth/login",
+      payload: { username: username.toUpperCase(), password: PASSWORD },
+    });
+    assert.equal(res.statusCode, 200, res.body);
+  });
+
   it("never returns the password hash", async () => {
-    const { email } = await createAdmin();
-    const res = await app.inject({ method: "POST", url: "/api/admin/auth/login", payload: { email, password: PASSWORD } });
+    const { username } = await createAdmin();
+    const res = await app.inject({ method: "POST", url: "/api/admin/auth/login", payload: { username, password: PASSWORD } });
     assert.ok(!res.body.includes("scrypt$"));
     const me = await app.inject({ method: "GET", url: "/api/admin/auth/me", headers: bearer(res.json().data.token) });
-    assert.equal(me.json().data.admin.email, email);
+    assert.equal(me.json().data.admin.username, username);
     assert.ok(!me.body.includes("passwordHash"));
   });
 
@@ -69,13 +80,13 @@ describe("Admin login", () => {
   });
 
   it("locks out a deactivated admin's existing token", async () => {
-    const { email, token } = await createAdmin();
-    await app.db.getRepository(AdminUser).update({ email }, { isActive: false });
+    const { username, token } = await createAdmin();
+    await app.db.getRepository(AdminUser).update({ username }, { isActive: false });
     assert.equal((await getSettings(token)).statusCode, 401);
   });
 
   it("changes the password", async () => {
-    const { email, token } = await createAdmin();
+    const { username, token } = await createAdmin();
     const url = "/api/admin/auth/change-password";
     const bad = await app.inject({
       method: "POST", url, headers: bearer(token),
@@ -93,7 +104,7 @@ describe("Admin login", () => {
     });
     assert.equal(ok.statusCode, 200);
     const login = (password: string) =>
-      app.inject({ method: "POST", url: "/api/admin/auth/login", payload: { email, password } });
+      app.inject({ method: "POST", url: "/api/admin/auth/login", payload: { username, password } });
     assert.equal((await login(PASSWORD)).statusCode, 401);
     assert.equal((await login("a-brand-new-password")).statusCode, 200);
   });

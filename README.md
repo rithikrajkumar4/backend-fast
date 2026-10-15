@@ -126,7 +126,7 @@ Users sign in with a **phone number** (code by SMS or WhatsApp), an **email** (c
 
 ### Admin panel
 
-1. Create an admin: `npm run admin:create -- --email you@example.com --password 'at-least-10-chars'` (run it again to reset a password).
+1. Create an admin: `npm run admin:create -- --username zeus --password 'at-least-10-chars'` (run it again to reset a password).
 2. Open `http://localhost:3000/admin` and sign in.
 
 From the panel you can turn each login method on or off, and set the OTP policy (length, expiry, attempts, resend cooldown, hourly cap). You also enter the SSO client IDs and the delivery provider credentials there, add fixed-code **test accounts** for App Store / Play Store review, and send test messages. Provider secrets are encrypted in the database (`CONFIG_ENCRYPTION_KEY`) and are never returned by the API. Set `ADMIN_PANEL_ENABLED=false` to turn the panel and its API off.

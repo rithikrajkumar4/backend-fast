@@ -1,29 +1,34 @@
 /**
  * Creates an admin for the panel at /admin, or resets the password of an existing one.
  *
- *   npm run admin:create -- --email you@example.com --password 'a-long-password' [--name "Your Name"]
+ *   npm run admin:create -- --username zeus --password 'a-long-password' [--name "Your Name"]
  *
- * ADMIN_EMAIL / ADMIN_PASSWORD / ADMIN_NAME work too (handy in containers).
+ * ADMIN_USERNAME / ADMIN_PASSWORD / ADMIN_NAME work too (handy in containers).
  */
 import { parseArgs } from "node:util";
 import { AppDataSource } from "../src/database/data-source.js";
 import { AdminService } from "../src/services/admin.service.js";
-import { adminPasswordSchema } from "../src/schemas/admin.schema.js";
+import { adminPasswordSchema, adminUsernameSchema } from "../src/schemas/admin.schema.js";
 
 const { values } = parseArgs({
   options: {
-    email: { type: "string" },
+    username: { type: "string" },
     password: { type: "string" },
     name: { type: "string" },
   },
 });
 
-const email = values.email ?? process.env.ADMIN_EMAIL;
+const username = values.username ?? process.env.ADMIN_USERNAME;
 const password = values.password ?? process.env.ADMIN_PASSWORD;
 const name = values.name ?? process.env.ADMIN_NAME ?? "";
 
-if (!email || !password) {
-  console.error("Usage: npm run admin:create -- --email you@example.com --password '<at least 10 chars>' [--name 'Name']");
+if (!username || !password) {
+  console.error("Usage: npm run admin:create -- --username zeus --password '<at least 10 chars>' [--name 'Name']");
+  process.exit(1);
+}
+const usernameCheck = adminUsernameSchema.safeParse(username);
+if (!usernameCheck.success) {
+  console.error(`❌ ${usernameCheck.error.errors[0]?.message}`);
   process.exit(1);
 }
 const passwordCheck = adminPasswordSchema.safeParse(password);
@@ -34,8 +39,8 @@ if (!passwordCheck.success) {
 
 await AppDataSource.initialize();
 try {
-  const { admin, created } = await AdminService.upsertAdmin(AppDataSource, email, password, name);
-  console.log(created ? `✅ Admin created: ${admin.email}` : `✅ Password reset for existing admin: ${admin.email}`);
+  const { admin, created } = await AdminService.upsertAdmin(AppDataSource, usernameCheck.data, password, name);
+  console.log(created ? `✅ Admin created: ${admin.username}` : `✅ Password reset for existing admin: ${admin.username}`);
 } finally {
   await AppDataSource.destroy();
 }
